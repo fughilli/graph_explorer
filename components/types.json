@@ -1,0 +1,44 @@
+[
+  {
+    "type": "rgb",
+    "td_type": "chop",
+    "td_width": 3,
+    "td_length": 1,
+    "description": "RGB color. Each value ranges from 0 to 1."
+  },
+  {
+    "type": "rgba",
+    "td_type": "chop",
+    "td_width": 4,
+    "td_length": 1,
+    "description": "RGBA color. Each value ranges from 0 to 1."
+  },
+  {
+    "type": "tex",
+    "td_type": "top",
+    "td_width": 1,
+    "td_length": 1,
+    "description": "Texture."
+  },
+  {
+    "type": "monotonic",
+    "td_type": "chop",
+    "td_width": 1,
+    "td_length": 1,
+    "description": "Monotonic value (always increasing)."
+  },
+  {
+    "type": "unitary",
+    "td_type": "chop",
+    "td_width": 1,
+    "td_length": 1,
+    "description": "Unitary value (always between 0 and 1)."
+  },
+  {
+    "type": "waveform",
+    "td_type": "chop",
+    "td_width": 1,
+    "td_length": "variable",
+    "description": "Waveform."
+  }
+]

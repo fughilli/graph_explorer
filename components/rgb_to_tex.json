@@ -1,0 +1,15 @@
+{
+  "inputs": [
+    {
+      "name": "texture_color",
+      "type": "rgb"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "texture",
+      "type": "tex"
+    }
+  ],
+  "description": "Converts an RGB color to a texture."
+}
