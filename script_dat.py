@@ -10,9 +10,30 @@ import select
 # Set the Pyro server type to "multiplex" so that calls are handled synchronously.
 config.SERVERTYPE = "multiplex"
 
-# -------------------------------
+# -------------------------------------------------
+# Cleanup any previous instance stored in this DAT
+# -------------------------------------------------
+# "me.fetch" will return None if nothing has been stored yet.
+old_manager = me.fetch('server_manager', None)
+if old_manager is not None:
+    try:
+        print("[DEBUG] Shutting down previously stored Pyro server manager.")
+        old_manager.stop_server()
+    except Exception as e:
+        print("[DEBUG] Error stopping previous Pyro server manager:", e)
+
+# Create and store a new instance of the server manager.
+new_manager = None  # Initialize variable
+try:
+    new_manager = None
+    new_manager = Pyro5.api.Daemon(
+    )  # We'll wrap this in our PyroServerManager below.
+except Exception as e:
+    print("[DEBUG] Error creating Pyro daemon:", e)
+
+# -----------------------------------
 # TouchDesigner Op and Proxy Classes
-# -------------------------------
+# -----------------------------------
 
 
 class AnnotatedOp:
@@ -160,9 +181,9 @@ class TdProxy:
 
 td_proxy = TdProxy()
 
-# -------------------------------
+# -------------------------------------------------
 # Pyro Server Manager with Synchronous Event Loop
-# -------------------------------
+# -------------------------------------------------
 
 
 class PyroServerManager:
@@ -230,11 +251,13 @@ class PyroServerManager:
             print("[DEBUG] No server to shut down.")
 
 
-server_manager = PyroServerManager()
+# Create a new PyroServerManager instance and store it in the DAT's storage.
+new_manager = PyroServerManager()
+me.store('server_manager', new_manager)
 
-# -------------------------------
+# -------------------------------------------------
 # TouchDesigner Callback Functions
-# -------------------------------
+# -------------------------------------------------
 
 
 def onSetupParameters(scriptOp):
@@ -245,7 +268,12 @@ def onSetupParameters(scriptOp):
 
 
 def onPulse(par):
+    # Fetch the stored server manager.
+    server_manager = me.fetch('server_manager', None)
     print(f"[DEBUG] onPulse triggered: {par.name}")
+    if server_manager is None:
+        print("[DEBUG] No server manager found!")
+        return
     if par.name == 'Startserver':
         server_manager.start_server()
     elif par.name == 'Stopserver':
@@ -253,9 +281,11 @@ def onPulse(par):
 
 
 def onCook(scriptOp):
+    # Fetch the stored server manager.
+    server_manager = me.fetch('server_manager', None)
     scriptOp.clear()
     # Poll Pyro events synchronously on each cook cycle.
-    if server_manager.running:
+    if server_manager and server_manager.running:
         server_manager.poll_events()
 
     scriptOp.appendRow(["Server running."])
