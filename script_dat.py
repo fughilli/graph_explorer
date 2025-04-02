@@ -10,27 +10,6 @@ import select
 # Set the Pyro server type to "multiplex" so that calls are handled synchronously.
 config.SERVERTYPE = "multiplex"
 
-# -------------------------------------------------
-# Cleanup any previous instance stored in this DAT
-# -------------------------------------------------
-# "me.fetch" will return None if nothing has been stored yet.
-old_manager = me.fetch('server_manager', None)
-if old_manager is not None:
-    try:
-        print("[DEBUG] Shutting down previously stored Pyro server manager.")
-        old_manager.stop_server()
-    except Exception as e:
-        print("[DEBUG] Error stopping previous Pyro server manager:", e)
-
-# Create and store a new instance of the server manager.
-new_manager = None  # Initialize variable
-try:
-    new_manager = None
-    new_manager = Pyro5.api.Daemon(
-    )  # We'll wrap this in our PyroServerManager below.
-except Exception as e:
-    print("[DEBUG] Error creating Pyro daemon:", e)
-
 # -----------------------------------
 # TouchDesigner Op and Proxy Classes
 # -----------------------------------
@@ -251,13 +230,11 @@ class PyroServerManager:
             print("[DEBUG] No server to shut down.")
 
 
-# Create a new PyroServerManager instance and store it in the DAT's storage.
-new_manager = PyroServerManager()
-me.store('server_manager', new_manager)
-
 # -------------------------------------------------
 # TouchDesigner Callback Functions
 # -------------------------------------------------
+
+me.storeStartupValue('server_manager', None)
 
 
 def onSetupParameters(scriptOp):
@@ -280,9 +257,24 @@ def onPulse(par):
         server_manager.stop_server()
 
 
+SHOULD_STOP = True
+
+
 def onCook(scriptOp):
+    global SHOULD_STOP
+
     # Fetch the stored server manager.
     server_manager = me.fetch('server_manager', None)
+
+    if server_manager is None:
+        # Create a new PyroServerManager instance and store it in the DAT's storage.
+        server_manager = PyroServerManager()
+        me.store('server_manager', server_manager)
+    else:
+        if SHOULD_STOP:
+            server_manager.stop_server()
+            SHOULD_STOP = False
+
     scriptOp.clear()
     # Poll Pyro events synchronously on each cook cycle.
     if server_manager and server_manager.running:
