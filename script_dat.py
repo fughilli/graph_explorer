@@ -60,6 +60,7 @@ class TdProxy:
         print(f"[DEBUG] Creating op: {name}")
         native_op = td.op('/project1').create(name)
         handle = self.insert_op(AnnotatedOp(native_op, {"name": name}))
+        native_op.store("handle", handle)
         print(f"[DEBUG] Created op with handle {handle}")
         return handle
 
@@ -79,6 +80,10 @@ class TdProxy:
         op.op.store("descriptor", op.descriptor)
         print(f"[DEBUG] Tox loaded with handle {handle}")
         return handle
+
+    @expose
+    def eval_to_str(self, expression):
+        return str(eval(expression))
 
     @expose
     def get_op_attribute(self, handle, attribute, dir_output=False):
@@ -123,35 +128,37 @@ class TdProxy:
 
             for connector in op.op.inputConnectors:
                 print(f"[DEBUG] Input connector: {connector}")
+                index = connector.index
                 owner_handle = self.get_handle_for_native_op(connector.owner)
-                target_handles = [
-                    self.get_handle_for_native_op(target)
+                target_handles_and_indices = [
+                    (self.get_handle_for_native_op(target.owner), target.index)
                     for target in connector.connections
                 ]
 
                 in_connector = {
-                    "owner_handle": owner_handle,
-                    "target_handles": target_handles
+                    "owner": (owner_handle, index),
+                    "targets": target_handles_and_indices,
                 }
                 print(f"[DEBUG] Converted connector: {in_connector}")
                 in_connectors.append(in_connector)
 
             for connector in op.op.outputConnectors:
                 print(f"[DEBUG] Output connector: {connector}")
+                index = connector.index
                 owner_handle = self.get_handle_for_native_op(connector.owner)
-                target_handles = [
-                    self.get_handle_for_native_op(target)
+                target_handles_and_indices = [
+                    (self.get_handle_for_native_op(target.owner), target.index)
                     for target in connector.connections
                 ]
 
                 out_connector = {
-                    "owner_handle": owner_handle,
-                    "target_handles": target_handles
+                    "owner": (owner_handle, index),
+                    "targets": target_handles_and_indices,
                 }
                 print(f"[DEBUG] Converted connector: {out_connector}")
                 out_connectors.append(out_connector)
 
-            result = in_connectors, out_connectors
+            result = {"in": in_connectors, "out": out_connectors}
             print(f"[DEBUG] Retrieved connectors: {result}")
             return result
         raise ValueError("No op found for given handle.")
@@ -171,6 +178,37 @@ class TdProxy:
         except Exception as e:
             print(f"[DEBUG] Connection failed: {e}")
         return False
+
+    @expose
+    def disconnect(self, handle, in_indices, out_indices):
+        print(
+            f"[DEBUG] Disconnecting inputs {in_indices} and outputs {out_indices} from op with handle {handle}"
+        )
+        try:
+            if op := self.get_op(handle):
+                for in_index in in_indices:
+                    op.op.inputConnectors[in_index].disconnect()
+                for out_index in out_indices:
+                    op.op.outputConnectors[out_index].disconnect()
+                print("[DEBUG] Disconnection successful.")
+                return True
+        except Exception as e:
+            print(f"[DEBUG] Disconnection failed: {e}")
+        return False
+
+    @expose
+    def clear(self):
+        print("[DEBUG] Clearing all ops")
+        for handle, op in self.ops_by_handle.items():
+            if handle == 0:
+                # Skip the default project1 op, otherwise we crash.
+                continue
+            op.op.destroy()
+        project_op = self.ops_by_handle[0]
+        self.ops_by_handle.clear()
+        self.ops_by_handle[0] = project_op
+        self.current_handle = 1
+        return True
 
 
 td_proxy = TdProxy()
