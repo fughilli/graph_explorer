@@ -1,2 +1,4 @@
 .DS_Store
 venv/
+project/graph_explorer.*.toe
+project/Backup/

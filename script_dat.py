@@ -38,6 +38,7 @@ class TdProxy:
         self.ops_by_handle = {}
         self.current_handle = 0
 
+        # Create a default op for project1
         self.insert_op(AnnotatedOp(td.op('/project1'), {"name": "project1"}))
 
     def insert_op(self, op):
@@ -136,7 +137,6 @@ class TdProxy:
                 out_connectors.append(out_connector)
 
             result = in_connectors, out_connectors
-
             print(f"[DEBUG] Retrieved connectors: {result}")
             return result
         raise ValueError("No op found for given handle.")
@@ -170,6 +170,7 @@ class PyroServerManager:
     def __init__(self):
         self.server = None
         self.running = False
+        self.uri = None  # And the full URI
 
     def start_server(self):
         if self.server is not None:
@@ -186,8 +187,10 @@ class PyroServerManager:
         except Exception as ex:
             print(f"[DEBUG] Failed to unregister previous object: {ex}")
         try:
+            # Register our proxy. Save the URI.
             uri = self.server.register(td_proxy, objectId="td", force=True)
-            print(f"[DEBUG] Pyro server running at {uri}")
+            self.uri = str(uri)
+            print(f"[DEBUG] Pyro server running at {self.uri}")
         except Exception as e:
             print(f"[DEBUG] Error registering td_proxy: {e}")
             self.server = None
@@ -199,7 +202,6 @@ class PyroServerManager:
     def poll_events(self):
         if self.server and self.running:
             sockets = self.server.sockets
-            # Process events as long as sockets report readiness.
             while True:
                 try:
                     ready, _, _ = select.select(sockets, [], [], 0.01)
@@ -226,6 +228,7 @@ class PyroServerManager:
                 print(f"[DEBUG] Error during server shutdown: {e}")
             self.running = False
             self.server = None
+            self.uri = None
         else:
             print("[DEBUG] No server to shut down.")
 
@@ -234,6 +237,7 @@ class PyroServerManager:
 # TouchDesigner Callback Functions
 # -------------------------------------------------
 
+# Use storeStartupValue so the stored value isn't pickled with the project.
 me.storeStartupValue('server_manager', None)
 
 
@@ -241,6 +245,8 @@ def onSetupParameters(scriptOp):
     page = scriptOp.appendCustomPage('Custom')
     page.appendPulse('Startserver', label='Start Server')
     page.appendPulse('Stopserver', label='Stop Server')
+    # Add a string parameter to show the server URI.
+    page.appendStr('Serveruri', label='Server URI')
     print("[DEBUG] onSetupParameters: Parameters set up.")
 
 
@@ -265,9 +271,7 @@ def onCook(scriptOp):
 
     # Fetch the stored server manager.
     server_manager = me.fetch('server_manager', None)
-
     if server_manager is None:
-        # Create a new PyroServerManager instance and store it in the DAT's storage.
         server_manager = PyroServerManager()
         me.store('server_manager', server_manager)
     else:
@@ -279,5 +283,17 @@ def onCook(scriptOp):
     # Poll Pyro events synchronously on each cook cycle.
     if server_manager and server_manager.running:
         server_manager.poll_events()
-
-    scriptOp.appendRow(["Server running."])
+        uri_str = str(server_manager.uri) if server_manager.uri else "Unknown"
+        scriptOp.appendRow(["Server running on port: " + uri_str])
+        # Update the custom parameter on the DAT (if it exists)
+        try:
+            # Update the parameter value. Adjust the syntax if needed.
+            scriptOp.par.Serveruri = uri_str
+        except Exception as e:
+            print(f"[DEBUG] Error updating Serveruri parameter: {e}")
+    else:
+        scriptOp.appendRow(["Server not running."])
+        try:
+            scriptOp.par.Serveruri = ""
+        except Exception as e:
+            print(f"[DEBUG] Error updating Serveruri parameter: {e}")
