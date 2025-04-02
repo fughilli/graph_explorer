@@ -27,8 +27,9 @@ class AnnotatedOp:
         json_path = os.path.join(components_path, f"{name}.json")
         print(
             f"[DEBUG] Loading Tox from: {tox_path} and JSON from: {json_path}")
-        return cls(
-            td.op('/project1').loadTox(tox_path), json.load(open(json_path)))
+        descriptor = json.load(open(json_path))
+        descriptor["name"] = name
+        return cls(td.op('/project1').loadTox(tox_path), descriptor)
 
 
 class TdProxy:
@@ -48,10 +49,7 @@ class TdProxy:
         return self.current_handle - 1
 
     def get_handle_for_native_op(self, native_op):
-        for handle, op in self.ops_by_handle.items():
-            if op.op == native_op:
-                return handle
-        return
+        return native_op.fetch("handle", None)
 
     def get_op(self, handle):
         print(f"[DEBUG] Retrieving op with handle {handle}")
@@ -77,7 +75,8 @@ class TdProxy:
         op = AnnotatedOp.load(
             name, "/Users/kevin/Projects/graph_explorer/components")
         handle = self.insert_op(op)
-        op.op.tags.add(f"handle={handle}")
+        op.op.store("handle", handle)
+        op.op.store("descriptor", op.descriptor)
         print(f"[DEBUG] Tox loaded with handle {handle}")
         return handle
 
@@ -98,6 +97,22 @@ class TdProxy:
             return str(x)
         print("[DEBUG] No op found for given handle.")
         return None
+
+    @expose
+    def set_op_attribute(self, handle, attribute, value):
+        print(
+            f"[DEBUG] Setting attribute '{attribute}' on op with handle {handle} to {value}"
+        )
+        if op := self.get_op(handle):
+            x = op.op
+            attrs = attribute.split(".")
+            for attr in attrs[:-1]:
+                x = getattr(x, attr)
+            setattr(x, attrs[-1], value)
+            print("[DEBUG] Attribute set.")
+            return True
+        print("[DEBUG] No op found for given handle.")
+        return False
 
     @expose
     def get_op_connectors(self, handle) -> tuple[list, list]:
@@ -247,6 +262,11 @@ def onSetupParameters(scriptOp):
     page.appendPulse('Stopserver', label='Stop Server')
     # Add a string parameter to show the server URI.
     page.appendStr('Serveruri', label='Server URI')
+    page.appendFloat('Dummycook', label='Dummy Force Cook Parameter')
+
+    scriptOp.par.Dummycook.expr = "me.time.seconds"
+    scriptOp.par.Dummycook.readOnly = True
+
     print("[DEBUG] onSetupParameters: Parameters set up.")
 
 
