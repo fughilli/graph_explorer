@@ -1,4 +1,5 @@
 {
+  "tox_file": "rgb_to_tex.tox",
   "inputs": [
     {
       "name": "texture_color",

@@ -19,17 +19,17 @@ def main():
         print(f"Error: {e}")
 
     if args.test_network:
-        audio_to_band_index = td_proxy.load_tox('audio_to_band')
-        audio_in_index = td_proxy.load_tox('audio_in')
+        audio_to_band_index = td_proxy.load('audio_to_band')
+        audio_in_index = td_proxy.load('audio_in')
         nullTOP_index = td_proxy.create_op('nullTOP')
-        mergeCHOP_index = td_proxy.create_op('mergeCHOP')
-        rgb_to_tex_index = td_proxy.load_tox('rgb_to_tex')
+        unitary_to_rgb_index = td_proxy.load('wrapped/unitary_to_rgb')
+        rgb_to_tex_index = td_proxy.load('rgb_to_tex')
 
         td_proxy.connect(audio_in_index, 0, audio_to_band_index, 0)
-        td_proxy.connect(audio_to_band_index, 0, mergeCHOP_index, 0)
-        td_proxy.connect(audio_to_band_index, 1, mergeCHOP_index, 1)
-        td_proxy.connect(audio_to_band_index, 2, mergeCHOP_index, 2)
-        td_proxy.connect(mergeCHOP_index, 0, rgb_to_tex_index, 0)
+        td_proxy.connect(audio_to_band_index, 0, unitary_to_rgb_index, 0)
+        td_proxy.connect(audio_to_band_index, 1, unitary_to_rgb_index, 1)
+        td_proxy.connect(audio_to_band_index, 2, unitary_to_rgb_index, 2)
+        td_proxy.connect(unitary_to_rgb_index, 0, rgb_to_tex_index, 0)
         td_proxy.connect(rgb_to_tex_index, 0, nullTOP_index, 0)
 
         td_proxy.set_op_attribute(nullTOP_index, "display", True)

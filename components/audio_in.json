@@ -1,1 +1,11 @@
-{}
+{
+  "tox_file": "audio_in.tox",
+  "inputs": [],
+  "outputs": [
+    {
+      "name": "audio",
+      "type": "waveform"
+    }
+  ],
+  "description": "Reads audio from the system."
+}

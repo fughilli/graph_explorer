@@ -23,13 +23,29 @@ class AnnotatedOp:
 
     @classmethod
     def load(cls, name, components_path):
-        tox_path = os.path.join(components_path, f"{name}.tox")
         json_path = os.path.join(components_path, f"{name}.json")
-        print(
-            f"[DEBUG] Loading Tox from: {tox_path} and JSON from: {json_path}")
+        print(f"[DEBUG] Loading JSON from: {json_path}")
         descriptor = json.load(open(json_path))
         descriptor["name"] = name
-        return cls(td.op('/project1').loadTox(tox_path), descriptor)
+
+        # Handle either tox_file or td_component
+        if "tox_file" in descriptor:
+            # Load from specified tox file, relative to JSON location
+            json_dir = os.path.dirname(json_path)
+            tox_path = os.path.join(json_dir, descriptor["tox_file"])
+            print(f"[DEBUG] Loading Tox from: {tox_path}")
+            op = td.op('/project1').loadTox(tox_path)
+        elif "td_component" in descriptor:
+            # Create built-in TD component
+            print(
+                f"[DEBUG] Creating TD component: {descriptor['td_component']}")
+            op = td.op('/project1').create(descriptor['td_component'])
+        else:
+            raise ValueError(
+                f"Component descriptor must specify either 'tox_file' or 'td_component'"
+            )
+
+        return cls(op, descriptor)
 
 
 class TdProxy:
@@ -71,8 +87,8 @@ class TdProxy:
                 for handle, op in self.ops_by_handle.items()]
 
     @expose
-    def load_tox(self, name):
-        print(f"[DEBUG] Loading tox: {name}")
+    def load(self, name):
+        print(f"[DEBUG] Loading component: {name}")
         op = AnnotatedOp.load(
             name, "/Users/kevin/Projects/graph_explorer/components")
         handle = self.insert_op(op)

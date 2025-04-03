@@ -1,0 +1,24 @@
+{
+  "td_component": "mergeCHOP",
+  "inputs": [
+    {
+      "name": "red",
+      "type": "unitary"
+    },
+    {
+      "name": "green",
+      "type": "unitary"
+    },
+    {
+      "name": "blue",
+      "type": "unitary"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "rgb",
+      "type": "rgb"
+    }
+  ],
+  "description": "Converts 3 unitary values to an RGB color."
+}

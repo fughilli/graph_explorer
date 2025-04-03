@@ -1,1 +1,24 @@
-{}
+{
+  "tox_file": "audio_to_band.tox",
+  "inputs": [
+    {
+      "name": "audio",
+      "type": "waveform"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bass",
+      "type": "unitary"
+    },
+    {
+      "name": "mid",
+      "type": "unitary"
+    },
+    {
+      "name": "treble",
+      "type": "unitary"
+    }
+  ],
+  "description": "Converts an audio waveform to a bass, mid, and treble band."
+}
