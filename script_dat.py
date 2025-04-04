@@ -10,6 +10,8 @@ import select
 # Set the Pyro server type to "multiplex" so that calls are handled synchronously.
 config.SERVERTYPE = "multiplex"
 
+NETWORK_COMPONENT_PATH = "/project1/network"
+
 # -----------------------------------
 # TouchDesigner Op and Proxy Classes
 # -----------------------------------
@@ -17,9 +19,10 @@ config.SERVERTYPE = "multiplex"
 
 class AnnotatedOp:
 
-    def __init__(self, op, descriptor):
+    def __init__(self, op, descriptor, reserved=False):
         self.op = op
         self.descriptor = descriptor
+        self.reserved = reserved
 
     @classmethod
     def load(cls, name, components_path):
@@ -34,12 +37,12 @@ class AnnotatedOp:
             json_dir = os.path.dirname(json_path)
             tox_path = os.path.join(json_dir, descriptor["tox_file"])
             print(f"[DEBUG] Loading Tox from: {tox_path}")
-            op = td.op('/project1').loadTox(tox_path)
+            op = td.op('/project1/network').loadTox(tox_path)
         elif "td_component" in descriptor:
             # Create built-in TD component
             print(
                 f"[DEBUG] Creating TD component: {descriptor['td_component']}")
-            op = td.op('/project1').create(descriptor['td_component'])
+            op = td.op('/project1/network').create(descriptor['td_component'])
         else:
             raise ValueError(
                 f"Component descriptor must specify either 'tox_file' or 'td_component'"
@@ -55,8 +58,17 @@ class TdProxy:
         self.ops_by_handle = {}
         self.current_handle = 0
 
+        if not td.op('/project1/network'):
+            self.network_op = td.op('/project1').create('baseCOMP')
+            self.network_op.name = 'network'
+
+        if not td.op('/project1/network/tex_out'):
+            self.tex_out_op = td.op('/project1/network').create('outTOP')
+            self.tex_out_op.name = 'tex_out'
+
         # Create a default op for project1
-        self.insert_op(AnnotatedOp(td.op('/project1'), {"name": "project1"}))
+        self.insert_op(AnnotatedOp(self.network_op, {"name": "network"}, reserved=True))
+        self.insert_op(AnnotatedOp(self.tex_out_op, {"name": "tex_out"}, reserved=True))
 
     def insert_op(self, op):
         self.ops_by_handle[self.current_handle] = op
@@ -74,7 +86,7 @@ class TdProxy:
     @expose
     def create_op(self, name):
         print(f"[DEBUG] Creating op: {name}")
-        native_op = td.op('/project1').create(name)
+        native_op = td.op('/project1/network').create(name)
         handle = self.insert_op(AnnotatedOp(native_op, {"name": name}))
         native_op.store("handle", handle)
         print(f"[DEBUG] Created op with handle {handle}")
@@ -100,6 +112,16 @@ class TdProxy:
     @expose
     def eval_to_str(self, expression):
         return str(eval(expression))
+    
+    @expose
+    def get_op_node_geometry(self, handle):
+        native_op = self.get_op(handle).op
+        return (
+            native_op.nodeX,
+            native_op.nodeY,
+            native_op.nodeWidth,
+            native_op.nodeHeight,
+        )
 
     @expose
     def get_op_attribute(self, handle, attribute, dir_output=False):
@@ -215,15 +237,18 @@ class TdProxy:
     @expose
     def clear(self):
         print("[DEBUG] Clearing all ops")
+        handles_to_remove = []
         for handle, op in self.ops_by_handle.items():
-            if handle == 0:
+            if op.reserved:
                 # Skip the default project1 op, otherwise we crash.
                 continue
             op.op.destroy()
-        project_op = self.ops_by_handle[0]
-        self.ops_by_handle.clear()
-        self.ops_by_handle[0] = project_op
-        self.current_handle = 1
+            handles_to_remove.append(handle)
+
+        for handle in handles_to_remove:
+            self.ops_by_handle.pop(handle)
+
+        self.current_handle = len(self.ops_by_handle)
         return True
 
 
