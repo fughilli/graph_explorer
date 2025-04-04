@@ -77,26 +77,49 @@ def topo_sort_handles(td_proxy, handles):
 
 def layout_nodes(td_proxy, sorted_handles):
     print("[DEBUG] Starting node layout")
+    # Reverse the order to get left-to-right layout
+    sorted_handles = list(reversed(sorted_handles))
+
+    # Add the output node (handle 1) to our layout
+    sorted_handles.append(1)  # The output node always has handle 1
+
     # Get the geometry for each handle
     geometry = {}
+    total_width = 0
+    max_height = 0
+    MARGIN = 20  # Units between nodes
+
+    print("[DEBUG] Collecting geometry information")
     for handle in sorted_handles:
         print(f"[DEBUG] Getting geometry for handle {handle}")
         x, y, w, h = td_proxy.get_op_node_geometry(handle)
         geometry[handle] = (x, y, w, h)
+        total_width += w
+        max_height = max(max_height, h)
         print(f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
 
-    # Set all of the node X coordinates according to the sorted order and cumulative width
-    cum_width = 0
-    cum_height = 0
+    # Calculate total width including margins
+    total_width += MARGIN * (len(sorted_handles) - 1)
+
+    # Calculate starting x position to center around 0
+    start_x = -total_width / 2
+
+    # Set all of the node X coordinates according to the sorted order
+    current_x = start_x
+    print("[DEBUG] Positioning nodes")
     for handle in sorted_handles:
         x, y, w, h = geometry[handle]
+        # Center vertically at y=0
+        center_y = -h / 2
+
         print(
-            f"[DEBUG] Setting position for handle {handle} to x={cum_width}, y={cum_height}"
+            f"[DEBUG] Setting position for handle {handle} to x={current_x}, y={center_y}"
         )
-        td_proxy.set_op_attribute(handle, "nodeX", cum_width)
-        td_proxy.set_op_attribute(handle, "nodeY", cum_height)
-        cum_width += w
-        cum_height += h
+        td_proxy.set_op_attribute(handle, "nodeX", current_x)
+        td_proxy.set_op_attribute(handle, "nodeY", center_y)
+
+        # Move to next position including margin
+        current_x += w + MARGIN
 
 
 def main():
