@@ -61,14 +61,20 @@ class TdProxy:
         if not td.op('/project1/network'):
             self.network_op = td.op('/project1').create('baseCOMP')
             self.network_op.name = 'network'
+        else:
+            self.network_op = td.op('/project1/network')
 
         if not td.op('/project1/network/tex_out'):
             self.tex_out_op = td.op('/project1/network').create('outTOP')
             self.tex_out_op.name = 'tex_out'
+        else:
+            self.tex_out_op = td.op('/project1/network/tex_out')
 
         # Create a default op for project1
-        self.insert_op(AnnotatedOp(self.network_op, {"name": "network"}, reserved=True))
-        self.insert_op(AnnotatedOp(self.tex_out_op, {"name": "tex_out"}, reserved=True))
+        self.insert_op(
+            AnnotatedOp(self.network_op, {"name": "network"}, reserved=True))
+        self.insert_op(
+            AnnotatedOp(self.tex_out_op, {"name": "tex_out"}, reserved=True))
 
     def insert_op(self, op):
         self.ops_by_handle[self.current_handle] = op
@@ -112,7 +118,7 @@ class TdProxy:
     @expose
     def eval_to_str(self, expression):
         return str(eval(expression))
-    
+
     @expose
     def get_op_node_geometry(self, handle):
         native_op = self.get_op(handle).op
@@ -237,22 +243,32 @@ class TdProxy:
     @expose
     def clear(self):
         print("[DEBUG] Clearing all ops")
-        handles_to_remove = []
-        for handle, op in self.ops_by_handle.items():
-            if op.reserved:
-                # Skip the default project1 op, otherwise we crash.
-                continue
-            op.op.destroy()
-            handles_to_remove.append(handle)
+        try:
+            handles_to_remove = []
+            for handle, op in self.ops_by_handle.items():
+                if op.reserved:
+                    # Skip the default project1 op, otherwise we crash.
+                    continue
+                try:
+                    op.op.destroy()
+                    handles_to_remove.append(handle)
+                except Exception as e:
+                    print(
+                        f"[DEBUG] Error destroying op with handle {handle}: {str(e)}"
+                    )
+                    # Continue with other ops even if one fails
+                    continue
 
-        for handle in handles_to_remove:
-            self.ops_by_handle.pop(handle)
+            for handle in handles_to_remove:
+                self.ops_by_handle.pop(handle)
 
-        self.current_handle = len(self.ops_by_handle)
-        return True
+            self.current_handle = len(self.ops_by_handle)
+            return True
+        except Exception as e:
+            # Convert any TD errors to a standard Python error message
+            print(f"[DEBUG] Error during clear operation: {str(e)}")
+            raise RuntimeError(f"Failed to clear operators: {str(e)}")
 
-
-td_proxy = TdProxy()
 
 # -------------------------------------------------
 # Pyro Server Manager with Synchronous Event Loop
@@ -265,6 +281,7 @@ class PyroServerManager:
         self.server = None
         self.running = False
         self.uri = None  # And the full URI
+        self.td_proxy = TdProxy()
 
     def start_server(self):
         if self.server is not None:
@@ -282,7 +299,9 @@ class PyroServerManager:
             print(f"[DEBUG] Failed to unregister previous object: {ex}")
         try:
             # Register our proxy. Save the URI.
-            uri = self.server.register(td_proxy, objectId="td", force=True)
+            uri = self.server.register(self.td_proxy,
+                                       objectId="td",
+                                       force=True)
             self.uri = str(uri)
             print(f"[DEBUG] Pyro server running at {self.uri}")
         except Exception as e:

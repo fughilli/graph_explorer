@@ -9,13 +9,30 @@ def topo_sort_handles(td_proxy, handles):
     connection_info = {}
     for handle in handles:
         print(f"[DEBUG] Getting connectors for handle {handle}")
-        in_connectors, out_connectors = td_proxy.get_op_connectors(handle)
+        connectors = td_proxy.get_op_connectors(handle)
+        print(f"[DEBUG] Raw connector info: {connectors}")
+
+        # Look at the actual connections in the input connectors
+        in_connections = []
+        for in_conn in connectors["in"]:
+            if in_conn["targets"]:
+                # Only count connectors that have actual connections
+                in_connections.append(in_conn)
+
+        out_connections = []
+        for out_conn in connectors["out"]:
+            if out_conn["targets"]:
+                # Only count connectors that have actual connections
+                out_connections.append(out_conn)
+
         connection_info[handle] = {
-            "in_connectors": in_connectors,
-            "out_connectors": out_connectors
+            "in_connectors": in_connections,
+            "out_connectors": out_connections
         }
-        print(f"[DEBUG] Handle {handle} has {len(in_connectors)} inputs and {len(out_connectors)} outputs")
-    
+        print(
+            f"[DEBUG] Handle {handle} has {len(in_connections)} active inputs and {len(out_connections)} active outputs"
+        )
+
     # Find a node with no incoming connections
     print("[DEBUG] Finding start node (node with no inputs)")
     start_node = None
@@ -27,27 +44,36 @@ def topo_sort_handles(td_proxy, handles):
 
     if start_node is None:
         raise ValueError("No start node found - graph may have cycles")
-    
+
     sorted_handles = []
     visited = set()
 
     def visit(handle):
         print(f"[DEBUG] Visiting node {handle}")
+        if handle is None:  # Skip None handles
+            print(f"[DEBUG] Skipping None handle")
+            return
         if handle in visited:
             print(f"[DEBUG] Node {handle} already visited, skipping")
             return
         visited.add(handle)
         print(f"[DEBUG] Processing outputs of node {handle}")
         for out_connector in connection_info[handle]["out_connectors"]:
-            next_handle = out_connector[0]
-            print(f"[DEBUG] Following connection to node {next_handle}")
-            visit(next_handle)
+            for target_handle, _ in out_connector["targets"]:
+                if target_handle is not None:  # Only follow non-None handles
+                    print(
+                        f"[DEBUG] Following connection to node {target_handle}"
+                    )
+                    visit(target_handle)
+                else:
+                    print(f"[DEBUG] Skipping None target handle")
         print(f"[DEBUG] Adding node {handle} to sorted list")
         sorted_handles.append(handle)
 
     visit(start_node)
     print(f"[DEBUG] Topological sort complete. Order: {sorted_handles}")
     return sorted_handles
+
 
 def layout_nodes(td_proxy, sorted_handles):
     print("[DEBUG] Starting node layout")
@@ -58,19 +84,19 @@ def layout_nodes(td_proxy, sorted_handles):
         x, y, w, h = td_proxy.get_op_node_geometry(handle)
         geometry[handle] = (x, y, w, h)
         print(f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
-    
+
     # Set all of the node X coordinates according to the sorted order and cumulative width
     cum_width = 0
     cum_height = 0
     for handle in sorted_handles:
         x, y, w, h = geometry[handle]
-        print(f"[DEBUG] Setting position for handle {handle} to x={cum_width}, y={cum_height}")
+        print(
+            f"[DEBUG] Setting position for handle {handle} to x={cum_width}, y={cum_height}"
+        )
         td_proxy.set_op_attribute(handle, "nodeX", cum_width)
         td_proxy.set_op_attribute(handle, "nodeY", cum_height)
         cum_width += w
         cum_height += h
-
-
 
 
 def main():
@@ -109,9 +135,11 @@ def main():
         # Connections can also be fetched:
         #
         # in_connectors, out_connectors = td_proxy.get_op_connectors(audio_in_index)
-        sorted_handles = topo_sort_handles(td_proxy, [audio_in_index, audio_to_band_index, unitary_to_rgb_index, rgb_to_tex_index])
+        sorted_handles = topo_sort_handles(td_proxy, [
+            audio_in_index, audio_to_band_index, unitary_to_rgb_index,
+            rgb_to_tex_index
+        ])
         layout_nodes(td_proxy, sorted_handles)
-
 
     IPython.embed()
 
