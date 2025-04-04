@@ -3,3 +3,4 @@ venv/
 project/graph_explorer.*.toe
 project/Backup/
 project/CrashAutoSave.*
+__pycache__/
