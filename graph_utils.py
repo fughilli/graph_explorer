@@ -216,12 +216,26 @@ def topo_sort_handles(td_proxy, handles):
     print("[DEBUG] Starting topological sort")
     # Get the connection information for each handle
     connection_info = {}
+
+    # First pass: collect all handles including referenced inputs
+    all_handles = set(handles)
     for handle in handles:
         print(f"[DEBUG] Getting connectors for handle {handle}")
         connectors = td_proxy.get_op_connectors(handle)
         print(f"[DEBUG] Raw connector info: {connectors}")
 
-        # Count incoming edges for each node
+        # Look at the actual connections in the input connectors
+        for in_conn in connectors["in"]:
+            if in_conn[
+                    "targets"]:  # Only look at connectors that have actual connections
+                for target_handle, _ in in_conn["targets"]:
+                    if target_handle is not None:
+                        all_handles.add(target_handle)
+
+    # Second pass: get connection info for all handles
+    for handle in all_handles:
+        connectors = td_proxy.get_op_connectors(handle)
+
         in_connections = []
         for in_conn in connectors["in"]:
             if in_conn[
@@ -246,11 +260,11 @@ def topo_sort_handles(td_proxy, handles):
     # Count incoming edges for each node
     in_degree = {
         handle: len(connection_info[handle]["in_connectors"])
-        for handle in handles
+        for handle in all_handles
     }
 
     # Find all nodes with no incoming edges
-    queue = [handle for handle in handles if in_degree[handle] == 0]
+    queue = [handle for handle in all_handles if in_degree[handle] == 0]
     print(f"[DEBUG] Starting nodes with no incoming edges: {queue}")
 
     sorted_handles = []
@@ -273,7 +287,7 @@ def topo_sort_handles(td_proxy, handles):
                             f"[DEBUG] Node {target_handle} has no more incoming edges, adding to queue"
                         )
 
-    if len(sorted_handles) != len(handles):
+    if len(sorted_handles) != len(all_handles):
         raise ValueError("Graph has cycles")
 
     print(f"[DEBUG] Topological sort complete. Order: {sorted_handles}")
@@ -282,9 +296,6 @@ def topo_sort_handles(td_proxy, handles):
 
 def layout_nodes(td_proxy, sorted_handles):
     print("[DEBUG] Starting node layout")
-    # Reverse the order to get left-to-right layout
-    sorted_handles = list(reversed(sorted_handles))
-
     # Add the output node (handle 1) to our layout
     sorted_handles.append(1)  # The output node always has handle 1
 
