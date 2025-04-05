@@ -1,17 +1,31 @@
 import json
 import os
 import random
+import logging
 from typing import Dict, List, Set, Tuple
+from pathlib import Path
 
+# Configure logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Default to INFO level
+
+# Create console handler if none exists
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
 def load_components(components_dir: str) -> Dict[str, dict]:
     """Load all component descriptors from the components directory."""
     components = {}
+    components_path = Path(components_dir)
 
     # Load types.json first
     with open(os.path.join(components_dir, "types.json")) as f:
         types = json.load(f)
-        print(f"[DEBUG] Loaded types: {types}")
+        logger.debug(f"[DEBUG] Loaded types: {types}")
 
     # Recursively walk through all directories
     for root, dirs, files in os.walk(components_dir):
@@ -24,7 +38,7 @@ def load_components(components_dir: str) -> Dict[str, dict]:
                     name = rel_path[:-5]  # Remove .json
                     descriptor = json.load(f)
                     components[name] = descriptor
-                    print(f"[DEBUG] Loaded component {name}: {descriptor}")
+                    logger.debug(f"[DEBUG] Loaded component {name}: {descriptor}")
 
     return components
 
@@ -38,7 +52,7 @@ def find_components_producing_type(type_name: str,
             if output["type"] == type_name:
                 matching_components.append(name)
                 break
-    print(f"[DEBUG] Components producing {type_name}: {matching_components}")
+    logger.debug(f"[DEBUG] Components producing {type_name}: {matching_components}")
     return matching_components
 
 
@@ -50,9 +64,9 @@ def bridge(td_proxy,
     Stochastically generate a network connecting input_nodes to output_nodes.
     Each tuple in input_nodes and output_nodes is (handle, type).
     """
-    print("[DEBUG] Starting bridge operation")
-    print(f"[DEBUG] Input nodes: {input_nodes}")
-    print(f"[DEBUG] Output nodes: {output_nodes}")
+    logger.debug("Starting bridge operation")
+    logger.debug(f"[DEBUG] Input nodes: {input_nodes}")
+    logger.debug(f"[DEBUG] Output nodes: {output_nodes}")
 
     # Load all component descriptors
     components = load_components(
@@ -100,7 +114,7 @@ def bridge(td_proxy,
             node_order[source_handle] = node_order[target_handle] - 1
 
         result = node_order[source_handle] < node_order[target_handle]
-        print(
+        logger.debug(
             f"[DEBUG] Cycle check: source={source_handle}(order={node_order.get(source_handle, 'None')}), "
             f"target={target_handle}(order={node_order.get(target_handle, 'None')}), result={result}"
         )
@@ -108,35 +122,35 @@ def bridge(td_proxy,
 
     while outputs_to_satisfy:
         output_handle, output_index, required_type = outputs_to_satisfy.pop(0)
-        print(
+        logger.debug(
             f"[DEBUG] Trying to satisfy output {output_handle}:{output_index} requiring type {required_type}"
         )
 
         # Try to find an existing output of the required type
-        print(f"[DEBUG] Available outputs by type: {available_outputs}")
+        logger.debug(f"[DEBUG] Available outputs by type: {available_outputs}")
         valid_existing_outputs = [
             (h, idx) for h, idx in available_outputs.get(required_type, [])
             if can_connect_without_cycle(h, output_handle)
         ]
-        print(
+        logger.debug(
             f"[DEBUG] Valid existing outputs for {required_type}: {valid_existing_outputs}"
         )
 
         rand_val = random.random()
         use_existing = valid_existing_outputs and rand_val < reuse_weight
-        print(
+        logger.debug(
             f"[DEBUG] Random value: {rand_val}, REUSE_WEIGHT: {reuse_weight}, use_existing: {use_existing}"
         )
 
         if use_existing:
             # Use an existing output
             source_handle, source_index = random.choice(valid_existing_outputs)
-            print(
+            logger.debug(
                 f"[DEBUG] Reusing existing output {source_handle}:{source_index} of type {required_type}"
             )
             td_proxy.connect(source_handle, source_index, output_handle,
                              output_index)
-            print(
+            logger.debug(
                 f"[DEBUG] Connected {source_handle}:{source_index} -> {output_handle}:{output_index}"
             )
 
@@ -144,7 +158,7 @@ def bridge(td_proxy,
             # Create a new component
             producer_components = find_components_producing_type(
                 required_type, components)
-            print(
+            logger.debug(
                 f"[DEBUG] Found producer components for {required_type}: {producer_components}"
             )
             if not producer_components:
@@ -153,17 +167,17 @@ def bridge(td_proxy,
                 )
 
             chosen_component = random.choice(producer_components)
-            print(
+            logger.debug(
                 f"[DEBUG] Chose component {chosen_component} to produce {required_type}"
             )
 
             new_handle = td_proxy.load(chosen_component)
             created_nodes.append(new_handle)
-            print(f"[DEBUG] Created component with handle {new_handle}")
+            logger.debug(f"[DEBUG] Created component with handle {new_handle}")
 
             # Connect its output to our target
             td_proxy.connect(new_handle, 0, output_handle, output_index)
-            print(
+            logger.debug(
                 f"[DEBUG] Connected {new_handle}:0 -> {output_handle}:{output_index}"
             )
 
@@ -175,7 +189,7 @@ def bridge(td_proxy,
                     if output_type not in available_outputs:
                         available_outputs[output_type] = []
                     available_outputs[output_type].append((new_handle, i))
-                    print(
+                    logger.debug(
                         f"[DEBUG] Registered available output {new_handle}:{i} of type {output_type}"
                     )
 
@@ -194,35 +208,35 @@ def bridge(td_proxy,
                     in_handle, in_index, _ = available_inputs.pop(
                         matching_input_idx)
                     td_proxy.connect(in_handle, in_index, new_handle, i)
-                    print(
+                    logger.debug(
                         f"[DEBUG] Connected available input {in_handle}:{in_index} -> {new_handle}:{i}"
                     )
                 else:
                     # Add to outputs we need to satisfy
                     outputs_to_satisfy.append(
                         (new_handle, i, input_desc["type"]))
-                    print(
+                    logger.debug(
                         f"[DEBUG] Added new output to satisfy: {new_handle}:{i} type {input_desc['type']}"
                     )
 
     if available_inputs:
-        print(f"[WARNING] Some inputs were not used: {available_inputs}")
+        logger.warning(f"[WARNING] Some inputs were not used: {available_inputs}")
 
     # Return all nodes involved in the bridge
     return created_nodes
 
 
 def topo_sort_handles(td_proxy, handles):
-    print("[DEBUG] Starting topological sort")
+    logger.debug("Starting topological sort")
     # Get the connection information for each handle
     connection_info = {}
 
     # First pass: collect all handles including referenced inputs
     all_handles = set(handles)
     for handle in handles:
-        print(f"[DEBUG] Getting connectors for handle {handle}")
+        logger.debug(f"[DEBUG] Getting connectors for handle {handle}")
         connectors = td_proxy.get_op_connectors(handle)
-        print(f"[DEBUG] Raw connector info: {connectors}")
+        logger.debug(f"[DEBUG] Raw connector info: {connectors}")
 
         # Look at the actual connections in the input connectors
         for in_conn in connectors["in"]:
@@ -252,7 +266,7 @@ def topo_sort_handles(td_proxy, handles):
             "in_connectors": in_connections,
             "out_connectors": out_connections
         }
-        print(
+        logger.debug(
             f"[DEBUG] Handle {handle} has {len(in_connections)} active inputs and {len(out_connections)} active outputs"
         )
 
@@ -265,37 +279,37 @@ def topo_sort_handles(td_proxy, handles):
 
     # Find all nodes with no incoming edges
     queue = [handle for handle in all_handles if in_degree[handle] == 0]
-    print(f"[DEBUG] Starting nodes with no incoming edges: {queue}")
+    logger.debug(f"[DEBUG] Starting nodes with no incoming edges: {queue}")
 
     sorted_handles = []
     while queue:
         current = queue.pop(0)  # Get next node with no incoming edges
         sorted_handles.append(current)
-        print(f"[DEBUG] Adding node {current} to sorted list")
+        logger.debug(f"[DEBUG] Adding node {current} to sorted list")
 
         # Remove edges from current node to its targets
         for out_conn in connection_info[current]["out_connectors"]:
             for target_handle, _ in out_conn["targets"]:
                 if target_handle in in_degree:  # Only process nodes we're tracking
                     in_degree[target_handle] -= 1
-                    print(
+                    logger.debug(
                         f"[DEBUG] Reduced in-degree of {target_handle} to {in_degree[target_handle]}"
                     )
                     if in_degree[target_handle] == 0:
                         queue.append(target_handle)
-                        print(
+                        logger.debug(
                             f"[DEBUG] Node {target_handle} has no more incoming edges, adding to queue"
                         )
 
     if len(sorted_handles) != len(all_handles):
         raise ValueError("Graph has cycles")
 
-    print(f"[DEBUG] Topological sort complete. Order: {sorted_handles}")
+    logger.debug(f"[DEBUG] Topological sort complete. Order: {sorted_handles}")
     return sorted_handles
 
 
 def layout_nodes(td_proxy, sorted_handles):
-    print("[DEBUG] Starting node layout")
+    logger.debug("Starting node layout")
     # Add the output node (handle 1) to our layout
     sorted_handles.append(1)  # The output node always has handle 1
 
@@ -305,14 +319,14 @@ def layout_nodes(td_proxy, sorted_handles):
     max_height = 0
     MARGIN = 20  # Units between nodes
 
-    print("[DEBUG] Collecting geometry information")
+    logger.debug("[DEBUG] Collecting geometry information")
     for handle in sorted_handles:
-        print(f"[DEBUG] Getting geometry for handle {handle}")
+        logger.debug(f"[DEBUG] Getting geometry for handle {handle}")
         x, y, w, h = td_proxy.get_op_node_geometry(handle)
         geometry[handle] = (x, y, w, h)
         total_width += w
         max_height = max(max_height, h)
-        print(f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
+        logger.debug(f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
 
     # Calculate total width including margins
     total_width += MARGIN * (len(sorted_handles) - 1)
@@ -322,13 +336,13 @@ def layout_nodes(td_proxy, sorted_handles):
 
     # Set all of the node X coordinates according to the sorted order
     current_x = start_x
-    print("[DEBUG] Positioning nodes")
+    logger.debug("[DEBUG] Positioning nodes")
     for handle in sorted_handles:
         x, y, w, h = geometry[handle]
         # Center vertically at y=0
         center_y = -h / 2
 
-        print(
+        logger.debug(
             f"[DEBUG] Setting position for handle {handle} to x={current_x}, y={center_y}"
         )
         td_proxy.set_op_attribute(handle, "nodeX", current_x)
