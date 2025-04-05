@@ -69,61 +69,142 @@ def bridge(td_proxy, input_nodes: List[Tuple[int, str]],
     # Keep track of all nodes we create
     created_nodes = []
 
+    # Keep track of available outputs by type
+    # Dict[type_name, List[Tuple[handle, output_index]]]
+    available_outputs = {}
+
+    # Keep track of node ordering to prevent cycles
+    # Dict[handle, order_index]
+    node_order = {}
+    current_order = 0
+
+    # Initialize output nodes with highest order
+    for handle, _ in output_nodes:
+        node_order[handle] = current_order
+        current_order += 1
+
+    # Weight for preferring existing outputs vs creating new components
+    REUSE_WEIGHT = 0.7  # 70% chance to reuse an existing output if available
+
+    def can_connect_without_cycle(source_handle: int,
+                                  target_handle: int) -> bool:
+        """Check if connecting source to target would create a cycle."""
+        nonlocal current_order
+
+        # If target isn't in ordering yet, assign it current_order
+        if target_handle not in node_order:
+            node_order[target_handle] = current_order
+            current_order += 1
+
+        # If source isn't in ordering yet, assign it an order before target
+        if source_handle not in node_order:
+            node_order[source_handle] = node_order[target_handle] - 1
+
+        result = node_order[source_handle] < node_order[target_handle]
+        print(
+            f"[DEBUG] Cycle check: source={source_handle}(order={node_order.get(source_handle, 'None')}), "
+            f"target={target_handle}(order={node_order.get(target_handle, 'None')}), result={result}"
+        )
+        return result
+
     while outputs_to_satisfy:
         output_handle, output_index, required_type = outputs_to_satisfy.pop(0)
         print(
             f"[DEBUG] Trying to satisfy output {output_handle}:{output_index} requiring type {required_type}"
         )
 
-        # Find components that can produce this type
-        producer_components = find_components_producing_type(
-            required_type, components)
-        if not producer_components:
-            raise ValueError(
-                f"No components found that can produce type {required_type}")
-
-        # Randomly choose a component
-        chosen_component = random.choice(producer_components)
+        # Try to find an existing output of the required type
+        print(f"[DEBUG] Available outputs by type: {available_outputs}")
+        valid_existing_outputs = [
+            (h, idx) for h, idx in available_outputs.get(required_type, [])
+            if can_connect_without_cycle(h, output_handle)
+        ]
         print(
-            f"[DEBUG] Chose component {chosen_component} to produce {required_type}"
+            f"[DEBUG] Valid existing outputs for {required_type}: {valid_existing_outputs}"
         )
 
-        # Create the component
-        new_handle = td_proxy.load(chosen_component)
-        created_nodes.append(new_handle)
-        print(f"[DEBUG] Created component with handle {new_handle}")
-
-        # Connect its output to our target
-        td_proxy.connect(new_handle, 0, output_handle, output_index)
+        rand_val = random.random()
+        use_existing = valid_existing_outputs and rand_val < REUSE_WEIGHT
         print(
-            f"[DEBUG] Connected {new_handle}:0 -> {output_handle}:{output_index}"
+            f"[DEBUG] Random value: {rand_val}, REUSE_WEIGHT: {REUSE_WEIGHT}, use_existing: {use_existing}"
         )
 
-        # Add its inputs to our list of outputs we need to satisfy
-        component_desc = components[chosen_component]
-        for i, input_desc in enumerate(component_desc.get("inputs", [])):
-            # First check if we have an available input of matching type
-            matching_input_idx = None
-            for j, (in_handle, in_index,
-                    in_type) in enumerate(available_inputs):
-                if in_type == input_desc["type"]:
-                    matching_input_idx = j
-                    break
+        if use_existing:
+            # Use an existing output
+            source_handle, source_index = random.choice(valid_existing_outputs)
+            print(
+                f"[DEBUG] Reusing existing output {source_handle}:{source_index} of type {required_type}"
+            )
+            td_proxy.connect(source_handle, source_index, output_handle,
+                             output_index)
+            print(
+                f"[DEBUG] Connected {source_handle}:{source_index} -> {output_handle}:{output_index}"
+            )
 
-            if matching_input_idx is not None:
-                # Use this available input
-                in_handle, in_index, _ = available_inputs.pop(
-                    matching_input_idx)
-                td_proxy.connect(in_handle, in_index, new_handle, i)
-                print(
-                    f"[DEBUG] Connected available input {in_handle}:{in_index} -> {new_handle}:{i}"
+        else:
+            # Create a new component
+            producer_components = find_components_producing_type(
+                required_type, components)
+            print(
+                f"[DEBUG] Found producer components for {required_type}: {producer_components}"
+            )
+            if not producer_components:
+                raise ValueError(
+                    f"No components found that can produce type {required_type}"
                 )
-            else:
-                # Add to outputs we need to satisfy
-                outputs_to_satisfy.append((new_handle, i, input_desc["type"]))
-                print(
-                    f"[DEBUG] Added new output to satisfy: {new_handle}:{i} type {input_desc['type']}"
-                )
+
+            chosen_component = random.choice(producer_components)
+            print(
+                f"[DEBUG] Chose component {chosen_component} to produce {required_type}"
+            )
+
+            new_handle = td_proxy.load(chosen_component)
+            created_nodes.append(new_handle)
+            print(f"[DEBUG] Created component with handle {new_handle}")
+
+            # Connect its output to our target
+            td_proxy.connect(new_handle, 0, output_handle, output_index)
+            print(
+                f"[DEBUG] Connected {new_handle}:0 -> {output_handle}:{output_index}"
+            )
+
+            # Register all outputs as available
+            component_desc = components[chosen_component]
+            for i, output_desc in enumerate(component_desc.get("outputs", [])):
+                if i != 0:  # Skip the output we just used
+                    output_type = output_desc["type"]
+                    if output_type not in available_outputs:
+                        available_outputs[output_type] = []
+                    available_outputs[output_type].append((new_handle, i))
+                    print(
+                        f"[DEBUG] Registered available output {new_handle}:{i} of type {output_type}"
+                    )
+
+            # Add its inputs to our list of outputs we need to satisfy
+            for i, input_desc in enumerate(component_desc.get("inputs", [])):
+                # First check if we have an available input of matching type
+                matching_input_idx = None
+                for j, (in_handle, in_index,
+                        in_type) in enumerate(available_inputs):
+                    if in_type == input_desc["type"]:
+                        matching_input_idx = j
+                        break
+
+                if matching_input_idx is not None:
+                    # Use this available input
+                    in_handle, in_index, _ = available_inputs.pop(
+                        matching_input_idx)
+                    td_proxy.connect(in_handle, in_index, new_handle, i)
+                    print(
+                        f"[DEBUG] Connected available input {in_handle}:{in_index} -> {new_handle}:{i}"
+                    )
+                else:
+                    # Add to outputs we need to satisfy
+                    outputs_to_satisfy.append(
+                        (new_handle, i, input_desc["type"]))
+                    print(
+                        f"[DEBUG] Added new output to satisfy: {new_handle}:{i} type {input_desc['type']}"
+                    )
 
     if available_inputs:
         print(f"[WARNING] Some inputs were not used: {available_inputs}")
@@ -161,6 +242,26 @@ def topo_sort_handles(td_proxy, handles):
         print(
             f"[DEBUG] Handle {handle} has {len(in_connections)} active inputs and {len(out_connections)} active outputs"
         )
+
+    # Also get connection info for any referenced input nodes
+    for handle in list(connection_info.keys()):
+        for in_conn in connection_info[handle]["in_connectors"]:
+            for target_handle, _ in in_conn["targets"]:
+                if target_handle not in connection_info:
+                    print(
+                        f"[DEBUG] Adding input node {target_handle} to connection info"
+                    )
+                    connectors = td_proxy.get_op_connectors(target_handle)
+                    in_connections = [
+                        conn for conn in connectors["in"] if conn["targets"]
+                    ]
+                    out_connections = [
+                        conn for conn in connectors["out"] if conn["targets"]
+                    ]
+                    connection_info[target_handle] = {
+                        "in_connectors": in_connections,
+                        "out_connectors": out_connections
+                    }
 
     # Find a node with no incoming connections
     print("[DEBUG] Finding start node (node with no inputs)")
