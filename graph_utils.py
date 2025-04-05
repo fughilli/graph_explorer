@@ -42,8 +42,10 @@ def find_components_producing_type(type_name: str,
     return matching_components
 
 
-def bridge(td_proxy, input_nodes: List[Tuple[int, str]],
-           output_nodes: List[Tuple[int, str]]):
+def bridge(td_proxy,
+           input_nodes: List[Tuple[int, str]],
+           output_nodes: List[Tuple[int, str]],
+           reuse_weight: float = 0.7):
     """
     Stochastically generate a network connecting input_nodes to output_nodes.
     Each tuple in input_nodes and output_nodes is (handle, type).
@@ -83,9 +85,6 @@ def bridge(td_proxy, input_nodes: List[Tuple[int, str]],
         node_order[handle] = current_order
         current_order += 1
 
-    # Weight for preferring existing outputs vs creating new components
-    REUSE_WEIGHT = 0.7  # 70% chance to reuse an existing output if available
-
     def can_connect_without_cycle(source_handle: int,
                                   target_handle: int) -> bool:
         """Check if connecting source to target would create a cycle."""
@@ -124,9 +123,9 @@ def bridge(td_proxy, input_nodes: List[Tuple[int, str]],
         )
 
         rand_val = random.random()
-        use_existing = valid_existing_outputs and rand_val < REUSE_WEIGHT
+        use_existing = valid_existing_outputs and rand_val < reuse_weight
         print(
-            f"[DEBUG] Random value: {rand_val}, REUSE_WEIGHT: {REUSE_WEIGHT}, use_existing: {use_existing}"
+            f"[DEBUG] Random value: {rand_val}, REUSE_WEIGHT: {reuse_weight}, use_existing: {use_existing}"
         )
 
         if use_existing:
@@ -222,7 +221,7 @@ def topo_sort_handles(td_proxy, handles):
         connectors = td_proxy.get_op_connectors(handle)
         print(f"[DEBUG] Raw connector info: {connectors}")
 
-        # Look at the actual connections in the input connectors
+        # Count incoming edges for each node
         in_connections = []
         for in_conn in connectors["in"]:
             if in_conn[
@@ -243,64 +242,40 @@ def topo_sort_handles(td_proxy, handles):
             f"[DEBUG] Handle {handle} has {len(in_connections)} active inputs and {len(out_connections)} active outputs"
         )
 
-    # Also get connection info for any referenced input nodes
-    for handle in list(connection_info.keys()):
-        for in_conn in connection_info[handle]["in_connectors"]:
-            for target_handle, _ in in_conn["targets"]:
-                if target_handle not in connection_info:
-                    print(
-                        f"[DEBUG] Adding input node {target_handle} to connection info"
-                    )
-                    connectors = td_proxy.get_op_connectors(target_handle)
-                    in_connections = [
-                        conn for conn in connectors["in"] if conn["targets"]
-                    ]
-                    out_connections = [
-                        conn for conn in connectors["out"] if conn["targets"]
-                    ]
-                    connection_info[target_handle] = {
-                        "in_connectors": in_connections,
-                        "out_connectors": out_connections
-                    }
+    # Kahn's algorithm for topological sort
+    # Count incoming edges for each node
+    in_degree = {
+        handle: len(connection_info[handle]["in_connectors"])
+        for handle in handles
+    }
 
-    # Find a node with no incoming connections
-    print("[DEBUG] Finding start node (node with no inputs)")
-    start_node = None
-    for handle, info in connection_info.items():
-        if not info["in_connectors"]:
-            start_node = handle
-            print(f"[DEBUG] Found start node: {handle}")
-            break
-
-    if start_node is None:
-        raise ValueError("No start node found - graph may have cycles")
+    # Find all nodes with no incoming edges
+    queue = [handle for handle in handles if in_degree[handle] == 0]
+    print(f"[DEBUG] Starting nodes with no incoming edges: {queue}")
 
     sorted_handles = []
-    visited = set()
+    while queue:
+        current = queue.pop(0)  # Get next node with no incoming edges
+        sorted_handles.append(current)
+        print(f"[DEBUG] Adding node {current} to sorted list")
 
-    def visit(handle):
-        print(f"[DEBUG] Visiting node {handle}")
-        if handle is None:  # Skip None handles
-            print(f"[DEBUG] Skipping None handle")
-            return
-        if handle in visited:
-            print(f"[DEBUG] Node {handle} already visited, skipping")
-            return
-        visited.add(handle)
-        print(f"[DEBUG] Processing outputs of node {handle}")
-        for out_connector in connection_info[handle]["out_connectors"]:
-            for target_handle, _ in out_connector["targets"]:
-                if target_handle is not None:  # Only follow non-None handles
+        # Remove edges from current node to its targets
+        for out_conn in connection_info[current]["out_connectors"]:
+            for target_handle, _ in out_conn["targets"]:
+                if target_handle in in_degree:  # Only process nodes we're tracking
+                    in_degree[target_handle] -= 1
                     print(
-                        f"[DEBUG] Following connection to node {target_handle}"
+                        f"[DEBUG] Reduced in-degree of {target_handle} to {in_degree[target_handle]}"
                     )
-                    visit(target_handle)
-                else:
-                    print(f"[DEBUG] Skipping None target handle")
-        print(f"[DEBUG] Adding node {handle} to sorted list")
-        sorted_handles.append(handle)
+                    if in_degree[target_handle] == 0:
+                        queue.append(target_handle)
+                        print(
+                            f"[DEBUG] Node {target_handle} has no more incoming edges, adding to queue"
+                        )
 
-    visit(start_node)
+    if len(sorted_handles) != len(handles):
+        raise ValueError("Graph has cycles")
+
     print(f"[DEBUG] Topological sort complete. Order: {sorted_handles}")
     return sorted_handles
 
