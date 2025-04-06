@@ -1,0 +1,11 @@
+{
+    "td_component": "outTOP",
+    "inputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "outputs": [],
+    "description": "Texture output."
+}

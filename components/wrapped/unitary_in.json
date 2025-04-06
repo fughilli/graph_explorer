@@ -1,0 +1,13 @@
+{
+    "td_component": "inCHOP",
+    "inputs": [
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "unitary"
+      }
+    ],
+    "description": "Unitary input."
+  }
+  

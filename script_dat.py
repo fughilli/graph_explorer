@@ -57,24 +57,49 @@ class TdProxy:
         self.td = td
         self.ops_by_handle = {}
         self.current_handle = 0
+        self.io_config = None
 
+        self.input_handles = []
+        self.output_handles = []
+
+        self.maybe_create_network_op()
+
+    def maybe_create_network_op(self):
         if not td.op('/project1/network'):
             self.network_op = td.op('/project1').create('baseCOMP')
             self.network_op.name = 'network'
         else:
             self.network_op = td.op('/project1/network')
 
-        if not td.op('/project1/network/tex_out'):
-            self.tex_out_op = td.op('/project1/network').create('outTOP')
-            self.tex_out_op.name = 'tex_out'
-        else:
-            self.tex_out_op = td.op('/project1/network/tex_out')
-
         # Create a default op for project1
-        self.insert_op(
-            AnnotatedOp(self.network_op, {"name": "network"}, reserved=True))
-        self.insert_op(
-            AnnotatedOp(self.tex_out_op, {"name": "tex_out"}, reserved=True))
+        if self.get_handle_for_native_op(self.network_op) is None:
+            # Network op is not registered. First, clear all ops.
+            self.clear()
+
+            # Then, register the network op.
+            self.insert_op(
+                AnnotatedOp(self.network_op, {"name": "network"},
+                            reserved=True))
+
+    def set_io_config(self, io_config):
+        self.io_config = io_config
+
+        # Delete old ops
+        for handle in self.input_handles:
+            self.delete_op(handle)
+        for handle in self.output_handles:
+            self.delete_op(handle)
+
+        self.input_handles = []
+        self.output_handles = []
+
+        inputs = io_config["inputs"]
+        for input in inputs:
+            self.input_handles.append(self.load(input))
+
+        outputs = io_config["outputs"]
+        for output in outputs:
+            self.output_handles.append(self.load(output))
 
     def insert_op(self, op):
         self.ops_by_handle[self.current_handle] = op
@@ -241,6 +266,15 @@ class TdProxy:
         return False
 
     @expose
+    def delete_op(self, handle):
+        print(f"[DEBUG] Deleting op with handle {handle}")
+        if op := self.get_op(handle):
+            op.op.destroy()
+            self.ops_by_handle.pop(handle)
+            return True
+        return False
+
+    @expose
     def clear(self):
         print("[DEBUG] Clearing all ops")
         try:
@@ -282,6 +316,15 @@ class PyroServerManager:
         self.running = False
         self.uri = None  # And the full URI
         self.td_proxy = TdProxy()
+        self.io_config_path = None
+
+    def set_io_config(self, io_config):
+        self.td_proxy.set_io_config(io_config)
+
+    def load_io_config(self, io_config_path):
+        if self.io_config_path != io_config_path:
+            self.set_io_config(json.load(open(io_config_path)))
+            self.io_config_path = io_config_path
 
     def start_server(self):
         if self.server is not None:
@@ -311,6 +354,9 @@ class PyroServerManager:
 
         self.running = True
         print("[DEBUG] Server started in synchronous mode (multiplex).")
+
+        # Create the network op if it doesn't exist.
+        self.td_proxy.maybe_create_network_op()
 
     def poll_events(self):
         if self.server and self.running:
@@ -353,6 +399,8 @@ class PyroServerManager:
 # Use storeStartupValue so the stored value isn't pickled with the project.
 me.storeStartupValue('server_manager', None)
 
+me.storeStartupValue('io_config_path', None)
+
 
 def onSetupParameters(scriptOp):
     page = scriptOp.appendCustomPage('Custom')
@@ -361,6 +409,9 @@ def onSetupParameters(scriptOp):
     # Add a string parameter to show the server URI.
     page.appendStr('Serveruri', label='Server URI')
     page.appendFloat('Dummycook', label='Dummy Force Cook Parameter')
+
+    p = page.appendStr('Ioconfig', label='I/O Config')
+    p.default = "components/io_config.json"
 
     scriptOp.par.Dummycook.expr = "me.time.seconds"
     scriptOp.par.Dummycook.readOnly = True
@@ -379,6 +430,7 @@ def onPulse(par):
         server_manager.start_server()
     elif par.name == 'Stopserver':
         server_manager.stop_server()
+        me.store('server_manager', None)
 
 
 SHOULD_STOP = True
@@ -400,6 +452,8 @@ def onCook(scriptOp):
     scriptOp.clear()
     # Poll Pyro events synchronously on each cook cycle.
     if server_manager and server_manager.running:
+        input_path = scriptOp.par.Ioconfig.eval()
+        server_manager.load_io_config(input_path)
         server_manager.poll_events()
         uri_str = str(server_manager.uri) if server_manager.uri else "Unknown"
         scriptOp.appendRow(["Server running on port: " + uri_str])
