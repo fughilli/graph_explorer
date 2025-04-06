@@ -1,8 +1,6 @@
 {
     "inputs": [
         "wrapped/unitary_in",
-        "wrapped/unitary_in",
-        "wrapped/unitary_in",
         "wrapped/unitary_in"
     ],
     "outputs": [

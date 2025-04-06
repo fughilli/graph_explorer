@@ -25,7 +25,7 @@ class AnnotatedOp:
         self.reserved = reserved
 
     @classmethod
-    def load(cls, name, components_path):
+    def load(cls, name, components_path, reserved=False):
         json_path = os.path.join(components_path, f"{name}.json")
         print(f"[DEBUG] Loading JSON from: {json_path}")
         descriptor = json.load(open(json_path))
@@ -48,7 +48,7 @@ class AnnotatedOp:
                 f"Component descriptor must specify either 'tox_file' or 'td_component'"
             )
 
-        return cls(op, descriptor)
+        return cls(op, descriptor, reserved)
 
 
 class TdProxy:
@@ -62,12 +62,22 @@ class TdProxy:
         self.input_handles = []
         self.output_handles = []
 
+        self.io_config_path = None
+
         self.maybe_create_network_op()
 
     def maybe_create_network_op(self):
         if not td.op('/project1/network'):
             self.network_op = td.op('/project1').create('baseCOMP')
             self.network_op.name = 'network'
+
+            # Network op was just created, there's no way we have any ops registered.
+            # Clear all ops and the input/output handles.
+            self.current_handle = 0
+            self.ops_by_handle = {}
+            self.input_handles = []
+            self.output_handles = []
+            self.io_config_path = None
         else:
             self.network_op = td.op('/project1/network')
 
@@ -80,6 +90,12 @@ class TdProxy:
             self.insert_op(
                 AnnotatedOp(self.network_op, {"name": "network"},
                             reserved=True))
+
+    def load_io_config(self, io_config_path):
+        if self.io_config_path != io_config_path:
+            print(f"[DEBUG] Loading IO config from: {io_config_path}")
+            self.set_io_config(json.load(open(io_config_path)))
+            self.io_config_path = io_config_path
 
     def set_io_config(self, io_config):
         self.io_config = io_config
@@ -95,11 +111,11 @@ class TdProxy:
 
         inputs = io_config["inputs"]
         for input in inputs:
-            self.input_handles.append(self.load(input))
+            self.input_handles.append(self.load(input, reserved=True))
 
         outputs = io_config["outputs"]
         for output in outputs:
-            self.output_handles.append(self.load(output))
+            self.output_handles.append(self.load(output, reserved=True))
 
     def insert_op(self, op):
         self.ops_by_handle[self.current_handle] = op
@@ -130,10 +146,10 @@ class TdProxy:
                 for handle, op in self.ops_by_handle.items()]
 
     @expose
-    def load(self, name):
+    def load(self, name, reserved=False):
         print(f"[DEBUG] Loading component: {name}")
         op = AnnotatedOp.load(
-            name, "/Users/kevin/Projects/graph_explorer/components")
+            name, "/Users/kevin/Projects/graph_explorer/components", reserved)
         handle = self.insert_op(op)
         op.op.store("handle", handle)
         op.op.store("descriptor", op.descriptor)
@@ -316,15 +332,9 @@ class PyroServerManager:
         self.running = False
         self.uri = None  # And the full URI
         self.td_proxy = TdProxy()
-        self.io_config_path = None
-
-    def set_io_config(self, io_config):
-        self.td_proxy.set_io_config(io_config)
 
     def load_io_config(self, io_config_path):
-        if self.io_config_path != io_config_path:
-            self.set_io_config(json.load(open(io_config_path)))
-            self.io_config_path = io_config_path
+        self.td_proxy.load_io_config(io_config_path)
 
     def start_server(self):
         if self.server is not None:
