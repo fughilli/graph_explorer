@@ -131,6 +131,13 @@ class TdProxy:
         return self.ops_by_handle.get(handle)
 
     @expose
+    def get_io_handles(self):
+        return {
+            "inputs": self.input_handles,
+            "outputs": self.output_handles,
+        }
+
+    @expose
     def create_op(self, name):
         print(f"[DEBUG] Creating op: {name}")
         native_op = td.op('/project1/network').create(name)
@@ -169,6 +176,10 @@ class TdProxy:
             native_op.nodeWidth,
             native_op.nodeHeight,
         )
+
+    @expose
+    def get_op_descriptor(self, handle):
+        return self.get_op(handle).descriptor
 
     @expose
     def get_op_attribute(self, handle, attribute, dir_output=False):
@@ -413,15 +424,15 @@ me.storeStartupValue('io_config_path', None)
 
 
 def onSetupParameters(scriptOp):
-    page = scriptOp.appendCustomPage('Custom')
+    page = scriptOp.appendCustomPage('Graph Explorer')
     page.appendPulse('Startserver', label='Start Server')
     page.appendPulse('Stopserver', label='Stop Server')
     # Add a string parameter to show the server URI.
     page.appendStr('Serveruri', label='Server URI')
     page.appendFloat('Dummycook', label='Dummy Force Cook Parameter')
 
-    p = page.appendStr('Ioconfig', label='I/O Config')
-    p.default = "components/io_config.json"
+    p = page.appendStr('Ioconfig', label='I/O Config')[0]
+    p.default = 'config/io_config.json'
 
     scriptOp.par.Dummycook.expr = "me.time.seconds"
     scriptOp.par.Dummycook.readOnly = True

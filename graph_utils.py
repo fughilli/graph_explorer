@@ -17,6 +17,7 @@ if not logger.handlers:
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
+
 def load_components(components_dir: str) -> Dict[str, dict]:
     """Load all component descriptors from the components directory."""
     components = {}
@@ -38,7 +39,8 @@ def load_components(components_dir: str) -> Dict[str, dict]:
                     name = rel_path[:-5]  # Remove .json
                     descriptor = json.load(f)
                     components[name] = descriptor
-                    logger.debug(f"[DEBUG] Loaded component {name}: {descriptor}")
+                    logger.debug(
+                        f"[DEBUG] Loaded component {name}: {descriptor}")
 
     return components
 
@@ -52,50 +54,89 @@ def find_components_producing_type(type_name: str,
             if output["type"] == type_name:
                 matching_components.append(name)
                 break
-    logger.debug(f"[DEBUG] Components producing {type_name}: {matching_components}")
+    logger.debug(
+        f"[DEBUG] Components producing {type_name}: {matching_components}")
     return matching_components
 
 
 def bridge(td_proxy,
-           input_nodes: List[Tuple[int, str]],
-           output_nodes: List[Tuple[int, str]],
-           reuse_weight: float = 0.7):
+           input_handles: List[int],
+           output_handles: List[int],
+           reuse_weight: float = 0.7,
+           include_io_config: bool = True):
     """
-    Stochastically generate a network connecting input_nodes to output_nodes.
-    Each tuple in input_nodes and output_nodes is (handle, type).
+    Stochastically generate a network connecting input nodes to output nodes.
+    Each handle represents a node in the TouchDesigner network.
+    Types are determined from component descriptors.
+
+    The handles from the I/O config are automatically added to the input and output lists when `include_io_config` is True.
+
+    Args:
+        td_proxy: The TouchDesigner proxy object.
+        input_handles: A list of input handles.
+        output_handles: A list of output handles.
+        reuse_weight: The weight of the reuse operation.
     """
     logger.debug("Starting bridge operation")
-    logger.debug(f"[DEBUG] Input nodes: {input_nodes}")
-    logger.debug(f"[DEBUG] Output nodes: {output_nodes}")
+    logger.debug("Input handles: %s", input_handles)
+    logger.debug("Output handles: %s", output_handles)
 
     # Load all component descriptors
     components = load_components(
         "/Users/kevin/Projects/graph_explorer/components")
 
+    if include_io_config:
+        io_config = td_proxy.get_io_handles()
+        input_handles.extend(io_config["inputs"])
+        output_handles.extend(io_config["outputs"])
+
+        # Deduplicate the input and output handles
+        input_handles = list(set(input_handles))
+        output_handles = list(set(output_handles))
+
+    # Get types for input and output nodes from their descriptors
+    # Each entry is (handle, index, type)
+    input_nodes = []
+    for handle in input_handles:
+        descriptor = td_proxy.get_op_descriptor(handle)
+        if descriptor and "outputs" in descriptor:
+            for idx, output in enumerate(descriptor["outputs"]):
+                output_type = output["type"]
+                input_nodes.append((handle, idx, output_type))
+                logger.debug("Input node %d output[%d] provides type %s",
+                             handle, idx, output_type)
+        else:
+            raise ValueError(f"No descriptor found for input handle {handle}")
+
     # Keep track of unsatisfied outputs we need to connect
-    # Each entry is (handle, connector_index, required_type)
-    outputs_to_satisfy = [(handle, 0, type_name)
-                          for handle, type_name in output_nodes]
+    outputs_to_satisfy = []
+    for handle in output_handles:
+        descriptor = td_proxy.get_op_descriptor(handle)
+        if descriptor and "inputs" in descriptor:
+            for idx, input_desc in enumerate(descriptor["inputs"]):
+                input_type = input_desc["type"]
+                outputs_to_satisfy.append((handle, idx, input_type))
+                logger.debug("Output node %d input[%d] requires type %s",
+                             handle, idx, input_type)
+        else:
+            raise ValueError(f"No descriptor found for output handle {handle}")
 
     # Keep track of available inputs we can connect to
-    # Each entry is (handle, connector_index, type_name)
-    available_inputs = [(handle, 0, type_name)
-                        for handle, type_name in input_nodes]
+    available_inputs = [(handle, idx, type_name)
+                        for handle, idx, type_name in input_nodes]
 
     # Keep track of all nodes we create
     created_nodes = []
 
     # Keep track of available outputs by type
-    # Dict[type_name, List[Tuple[handle, output_index]]]
-    available_outputs = {}
+    available_outputs = {}  # type -> List[(handle, index)]
 
     # Keep track of node ordering to prevent cycles
-    # Dict[handle, order_index]
     node_order = {}
     current_order = 0
 
     # Initialize output nodes with highest order
-    for handle, _ in output_nodes:
+    for handle in output_handles:
         node_order[handle] = current_order
         current_order += 1
 
@@ -220,7 +261,8 @@ def bridge(td_proxy,
                     )
 
     if available_inputs:
-        logger.warning(f"[WARNING] Some inputs were not used: {available_inputs}")
+        logger.warning(
+            f"[WARNING] Some inputs were not used: {available_inputs}")
 
     # Return all nodes involved in the bridge
     return created_nodes
@@ -326,7 +368,8 @@ def layout_nodes(td_proxy, sorted_handles):
         geometry[handle] = (x, y, w, h)
         total_width += w
         max_height = max(max_height, h)
-        logger.debug(f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
+        logger.debug(
+            f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
 
     # Calculate total width including margins
     total_width += MARGIN * (len(sorted_handles) - 1)
