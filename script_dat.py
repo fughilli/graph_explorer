@@ -51,7 +51,8 @@ class AnnotatedOp:
         return cls(op, descriptor, reserved)
 
 
-class TdProxy:
+@Pyro5.api.expose
+class TDProxy:
 
     def __init__(self):
         self.td = td
@@ -133,12 +134,13 @@ class TdProxy:
         return self.ops_by_handle.get(handle)
 
     def io_callback(self, io_args):
-        if self.io_callback_:
+        if self.io_callback_ is not None:
             self.io_callback_(io_args)
 
     @expose
-    def register_io_callback(self, callback):
-        self.io_callback_ = callback
+    def register_io_callback(self, callback_uri):
+        # Store the URI and create a proxy to the callback object
+        self.io_callback_ = Pyro5.api.Proxy(callback_uri)
 
     @expose
     def get_io_handles(self):
@@ -153,6 +155,7 @@ class TdProxy:
         native_op = td.op('/project1/network').create(name)
         handle = self.insert_op(AnnotatedOp(native_op, {"name": name}))
         native_op.store("handle", handle)
+        op.op.store("descriptor", op.descriptor)
         print(f"[DEBUG] Created op with handle {handle}")
         return handle
 
@@ -353,7 +356,7 @@ class PyroServerManager:
         self.running = False
         self.uri = None  # And the full URI
         self.io_args = None
-        self.td_proxy = TdProxy()
+        self.td_proxy = TDProxy()
 
     def load_io_config(self, io_config_path):
         self.td_proxy.load_io_config(io_config_path)
