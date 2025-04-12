@@ -135,11 +135,16 @@ class TDProxy:
 
     def io_callback(self, io_args):
         if self.io_callback_ is not None:
-            self.io_callback_(io_args)
+            try:
+                # Call the specific method on the proxy
+                self.io_callback_.notify(io_args)
+            except Exception as e:
+                print(f"Error calling IO callback: {e}")
 
     @expose
     def register_io_callback(self, callback_uri):
         # Store the URI and create a proxy to the callback object
+        print(f"[DEBUG] Registering callback with URI: {callback_uri}")
         self.io_callback_ = Pyro5.api.Proxy(callback_uri)
 
     @expose

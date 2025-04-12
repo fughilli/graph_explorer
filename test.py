@@ -5,14 +5,17 @@ from graph_utils import bridge, topo_sort_handles, layout_nodes
 import logging
 import threading
 
+td_proxy_container = [None]
+
 @Pyro5.api.expose    # Expose this class to be accessible over Pyro
 class IOCallback:
-    def __init__(self, td_proxy):
-        self.td_proxy = td_proxy
-        
-    def __call__(self, args):
+    @Pyro5.api.expose    # Make sure to expose the method
+    def notify(self, args):    # Changed from __call__ to a named method
         print(f"Callback received: {args}")
-        rebuild_graph(self.td_proxy)
+        print(f"TD proxy container: {td_proxy_container}")
+        if td_proxy_container[0] is not None:
+            print(f"Rebuilding graph")
+            rebuild_graph(td_proxy_container[0])
 
 def rebuild_graph(td_proxy):
     td_proxy.clear()
@@ -62,18 +65,22 @@ def main():
         
         # Create a Pyro daemon for the callback object
         daemon = Pyro5.api.Daemon()
-        callback = IOCallback(td_proxy)
+        callback = IOCallback()
         uri = daemon.register(callback)
         
         # Register the callback's URI instead of the function
         td_proxy.register_io_callback(uri)
+
+        td_proxy_container[0] = td_proxy
         
         if args.test_network:
             rebuild_graph(td_proxy)
             
         # Start the daemon loop in a separate thread
-        thread = threading.Thread(target=daemon.requestLoop, daemon=True)
-        thread.start()
+        #thread = threading.Thread(target=daemon.requestLoop, daemon=True)
+        #thread.start()
+
+        daemon.requestLoop()
             
     except Exception as e:
         print(f"Error: {e}")
