@@ -7,15 +7,7 @@ from pathlib import Path
 
 # Configure logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # Default to INFO level
-
-# Create console handler if none exists
-if not logger.handlers:
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+logger.setLevel(logging.DEBUG)  # Change from INFO to DEBUG
 
 
 def load_components(components_dir: str) -> Dict[str, dict]:
@@ -63,6 +55,7 @@ def bridge(td_proxy,
            input_handles: List[int],
            output_handles: List[int],
            reuse_weight: float = 0.7,
+           exclude_components: List[str] = [],
            include_io_config: bool = True):
     """
     Stochastically generate a network connecting input nodes to output nodes.
@@ -77,13 +70,31 @@ def bridge(td_proxy,
         output_handles: A list of output handles.
         reuse_weight: The weight of the reuse operation.
     """
-    logger.debug("Starting bridge operation")
-    logger.debug("Input handles: %s", input_handles)
-    logger.debug("Output handles: %s", output_handles)
+    logger.debug("Starting bridge with inputs=%s, outputs=%s", input_handles, output_handles)
+    
+    # Get IO configuration
+    io_config = td_proxy.get_io_handles()
+    logger.debug("IO config: %s", io_config)
 
-    # Load all component descriptors
+    # Get all component descriptors
     components = load_components(
         "/Users/kevin/Projects/graph_explorer/components")
+
+    # Exclude components specified in exclude_components
+    for component in exclude_components:
+        if component in components:
+            del components[component]
+
+    logger.debug("Available components: %s", components)
+
+    # Log the input node descriptors
+    for handle in input_handles:
+        desc = td_proxy.get_op_descriptor(handle)
+        logger.debug("Input handle %d descriptor: %s", handle, desc)
+
+    # When looking for components that can produce a type
+    producers = find_components_producing_type('waveform', components)
+    logger.debug("Found producers for 'waveform': %s", producers)
 
     if include_io_config:
         io_config = td_proxy.get_io_handles()
@@ -122,14 +133,19 @@ def bridge(td_proxy,
             raise ValueError(f"No descriptor found for output handle {handle}")
 
     # Keep track of available inputs we can connect to
-    available_inputs = [(handle, idx, type_name)
-                        for handle, idx, type_name in input_nodes]
+    # available_inputs = [(handle, idx, type_name)
+    #                     for handle, idx, type_name in input_nodes]
 
     # Keep track of all nodes we create
     created_nodes = []
 
     # Keep track of available outputs by type
     available_outputs = {}  # type -> List[(handle, index)]
+
+    for handle, idx, type_name in input_nodes:
+        if type_name not in available_outputs:
+            available_outputs[type_name] = []
+        available_outputs[type_name].append((handle, idx))
 
     # Keep track of node ordering to prevent cycles
     node_order = {}
@@ -183,7 +199,13 @@ def bridge(td_proxy,
             f"[DEBUG] Random value: {rand_val}, REUSE_WEIGHT: {reuse_weight}, use_existing: {use_existing}"
         )
 
-        if use_existing:
+        # Create a new component
+        producer_components = find_components_producing_type(
+            required_type, components)
+        logger.debug(
+            f"[DEBUG] Found producer components for {required_type}: {producer_components}"
+        )
+        if use_existing or not producer_components and len(valid_existing_outputs):
             # Use an existing output
             source_handle, source_index = random.choice(valid_existing_outputs)
             logger.debug(
@@ -196,12 +218,6 @@ def bridge(td_proxy,
             )
 
         else:
-            # Create a new component
-            producer_components = find_components_producing_type(
-                required_type, components)
-            logger.debug(
-                f"[DEBUG] Found producer components for {required_type}: {producer_components}"
-            )
             if not producer_components:
                 raise ValueError(
                     f"No components found that can produce type {required_type}"
@@ -237,32 +253,32 @@ def bridge(td_proxy,
             # Add its inputs to our list of outputs we need to satisfy
             for i, input_desc in enumerate(component_desc.get("inputs", [])):
                 # First check if we have an available input of matching type
-                matching_input_idx = None
-                for j, (in_handle, in_index,
-                        in_type) in enumerate(available_inputs):
-                    if in_type == input_desc["type"]:
-                        matching_input_idx = j
-                        break
+                # matching_input_idx = None
+                # for j, (in_handle, in_index,
+                #         in_type) in enumerate(available_inputs):
+                #     if in_type == input_desc["type"]:
+                #         matching_input_idx = j
+                #         break
 
-                if matching_input_idx is not None:
-                    # Use this available input
-                    in_handle, in_index, _ = available_inputs.pop(
-                        matching_input_idx)
-                    td_proxy.connect(in_handle, in_index, new_handle, i)
-                    logger.debug(
-                        f"[DEBUG] Connected available input {in_handle}:{in_index} -> {new_handle}:{i}"
-                    )
-                else:
-                    # Add to outputs we need to satisfy
-                    outputs_to_satisfy.append(
-                        (new_handle, i, input_desc["type"]))
-                    logger.debug(
-                        f"[DEBUG] Added new output to satisfy: {new_handle}:{i} type {input_desc['type']}"
-                    )
+                # if matching_input_idx is not None:
+                #     # Use this available input
+                #     in_handle, in_index, _ = available_inputs.pop(
+                #         matching_input_idx)
+                #     td_proxy.connect(in_handle, in_index, new_handle, i)
+                #     logger.debug(
+                #         f"[DEBUG] Connected available input {in_handle}:{in_index} -> {new_handle}:{i}"
+                #     )
+                # else:
+                # Add to outputs we need to satisfy
+                outputs_to_satisfy.append(
+                    (new_handle, i, input_desc["type"]))
+                logger.debug(
+                    f"[DEBUG] Added new output to satisfy: {new_handle}:{i} type {input_desc['type']}"
+                )
 
-    if available_inputs:
-        logger.warning(
-            f"[WARNING] Some inputs were not used: {available_inputs}")
+    #if available_inputs:
+    #    logger.warning(
+    #        f"[WARNING] Some inputs were not used: {available_inputs}")
 
     # Return all nodes involved in the bridge
     return created_nodes

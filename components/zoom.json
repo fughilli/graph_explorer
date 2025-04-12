@@ -1,0 +1,33 @@
+{
+    "tox_file": "zoom.tox",
+    "inputs": [
+      {
+        "name": "in_tex",
+        "type": "tex"
+      },
+      {
+        "name": "in_coeff",
+        "type": "unitary"
+      },
+      {
+        "name": "feedback_coeff",
+        "type": "unitary"
+      },
+      {
+        "name": "displace_xy",
+        "type": "xy"
+      },
+      {
+        "name": "zoom_speed",
+        "type": "unitary"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out_tex",
+        "type": "tex"
+      }
+    ],
+    "description": "Creates a recursive zoom effect."
+  }
+  

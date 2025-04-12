@@ -1,0 +1,17 @@
+{
+    "tox_file": "monotonic_to_sinusoid_unitary.tox",
+    "inputs": [
+      {
+        "name": "phase",
+        "type": "monotonic"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "sinusoid",
+        "type": "unitary"
+      }
+    ],
+    "description": "Converts a monotonic input to a sinusoidal unitary that goes as the input."
+  }
+  

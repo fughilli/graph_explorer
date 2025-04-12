@@ -1,0 +1,21 @@
+{
+    "tox_file": "spirogram.tox",
+    "inputs": [
+      {
+        "name": "in_audio",
+        "type": "waveform"
+      },
+      {
+        "name": "in_color",
+        "type": "rgb"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out_tex",
+        "type": "tex"
+      }
+    ],
+    "description": "Creates a spirogram."
+  }
+  

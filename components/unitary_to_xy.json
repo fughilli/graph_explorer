@@ -1,0 +1,21 @@
+{
+    "tox_file": "unitary_to_xy.tox",
+    "inputs": [
+      {
+        "name": "x",
+        "type": "unitary"
+      },
+      {
+        "name": "y",
+        "type": "unitary"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "xy",
+        "type": "xy"
+      }
+    ],
+    "description": "Converts 2 unitary values to an XY vector."
+  }
+  

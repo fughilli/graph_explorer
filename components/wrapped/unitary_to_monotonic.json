@@ -1,0 +1,17 @@
+{
+    "td_component": "speedCHOP",
+    "inputs": [
+      {
+        "name": "speed",
+        "type": "unitary"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "counter",
+        "type": "monotonic"
+      }
+    ],
+    "description": "Converts a unitary input to a monotonic output."
+  }
+  

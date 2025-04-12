@@ -1,0 +1,21 @@
+{
+    "tox_file": "monotonic_to_circular_xy.tox",
+    "inputs": [
+      {
+        "name": "phase",
+        "type": "monotonic"
+      },
+      {
+        "name": "radius",
+        "type": "unitary"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "pos",
+        "type": "xy"
+      }
+    ],
+    "description": "Converts a monotonic input to an XY that rotates with the input."
+  }
+  

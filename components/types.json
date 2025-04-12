@@ -40,5 +40,12 @@
     "td_width": 1,
     "td_length": "variable",
     "description": "Waveform."
+  },
+  {
+    "type": "xy",
+    "td_type": "chop",
+    "td_width": 2,
+    "td_length": 1,
+    "description": "XY vector."
   }
 ]

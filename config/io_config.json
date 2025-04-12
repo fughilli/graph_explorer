@@ -1,7 +1,10 @@
 {
     "inputs": [
+        "wrapped/waveform_in",
         "wrapped/unitary_in",
-        "wrapped/unitary_in"
+        "wrapped/unitary_in",
+        "wrapped/unitary_in",
+        "wrapped/xy_in"
     ],
     "outputs": [
         "wrapped/tex_out"

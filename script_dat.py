@@ -64,6 +64,8 @@ class TdProxy:
 
         self.io_config_path = None
 
+        self.io_callback_ = None
+
         self.maybe_create_network_op()
 
     def maybe_create_network_op(self):
@@ -129,6 +131,14 @@ class TdProxy:
     def get_op(self, handle):
         print(f"[DEBUG] Retrieving op with handle {handle}")
         return self.ops_by_handle.get(handle)
+
+    def io_callback(self, io_args):
+        if self.io_callback_:
+            self.io_callback_(io_args)
+
+    @expose
+    def register_io_callback(self, callback):
+        self.io_callback_ = callback
 
     @expose
     def get_io_handles(self):
@@ -342,10 +352,17 @@ class PyroServerManager:
         self.server = None
         self.running = False
         self.uri = None  # And the full URI
+        self.io_args = None
         self.td_proxy = TdProxy()
 
     def load_io_config(self, io_config_path):
         self.td_proxy.load_io_config(io_config_path)
+
+    def set_io_args(self, io_args):
+        self.io_args = json.loads(io_args)
+
+    def io_callback(self):
+        self.td_proxy.io_callback(self.io_args)
 
     def start_server(self):
         if self.server is not None:
@@ -427,6 +444,8 @@ def onSetupParameters(scriptOp):
     page = scriptOp.appendCustomPage('Graph Explorer')
     page.appendPulse('Startserver', label='Start Server')
     page.appendPulse('Stopserver', label='Stop Server')
+    page.appendPulse('Iocallback', label='I/O Callback')
+    page.appendStr('Ioargs', label='I/O Args')
     # Add a string parameter to show the server URI.
     page.appendStr('Serveruri', label='Server URI')
     page.appendFloat('Dummycook', label='Dummy Force Cook Parameter')
@@ -452,6 +471,8 @@ def onPulse(par):
     elif par.name == 'Stopserver':
         server_manager.stop_server()
         me.store('server_manager', None)
+    elif par.name == 'Iocallback':
+        server_manager.io_callback()
 
 
 SHOULD_STOP = True
@@ -484,6 +505,12 @@ def onCook(scriptOp):
             scriptOp.par.Serveruri = uri_str
         except Exception as e:
             print(f"[DEBUG] Error updating Serveruri parameter: {e}")
+
+        io_args = scriptOp.par.Ioargs.eval()
+        try:
+            server_manager.set_io_args(io_args)
+        except Exception as e:
+            print(f"[DEBUG] Error setting io args: {e}")
     else:
         scriptOp.appendRow(["Server not running."])
         try:
