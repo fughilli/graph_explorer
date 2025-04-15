@@ -25,11 +25,14 @@ class AnnotatedOp:
         self.reserved = reserved
 
     @classmethod
-    def load(cls, name, components_path, reserved=False):
+    def load(cls, name, components_path, reserved=False, io_op_config=None):
         json_path = os.path.join(components_path, f"{name}.json")
         print(f"[DEBUG] Loading JSON from: {json_path}")
         descriptor = json.load(open(json_path))
         descriptor["name"] = name
+
+        if io_op_config is not None:
+            descriptor["io_op_config"] = io_op_config
 
         # Handle either tox_file or td_component
         if "tox_file" in descriptor:
@@ -37,12 +40,12 @@ class AnnotatedOp:
             json_dir = os.path.dirname(json_path)
             tox_path = os.path.join(json_dir, descriptor["tox_file"])
             print(f"[DEBUG] Loading Tox from: {tox_path}")
-            op = td.op('/project1/network').loadTox(tox_path)
+            op = td.op(NETWORK_COMPONENT_PATH).loadTox(tox_path)
         elif "td_component" in descriptor:
             # Create built-in TD component
             print(
                 f"[DEBUG] Creating TD component: {descriptor['td_component']}")
-            op = td.op('/project1/network').create(descriptor['td_component'])
+            op = td.op(NETWORK_COMPONENT_PATH).create(descriptor['td_component'])
         else:
             raise ValueError(
                 f"Component descriptor must specify either 'tox_file' or 'td_component'"
@@ -67,10 +70,15 @@ class TDProxy:
 
         self.io_callback_ = None
 
+        self.network_op = None
+
         self.maybe_create_network_op()
 
     def maybe_create_network_op(self):
-        if not td.op('/project1/network'):
+        if self.network_op is not None:
+            return
+
+        if not td.op(NETWORK_COMPONENT_PATH):
             self.network_op = td.op('/project1').create('baseCOMP')
             self.network_op.name = 'network'
 
@@ -82,26 +90,55 @@ class TDProxy:
             self.output_handles = []
             self.io_config_path = None
         else:
-            self.network_op = td.op('/project1/network')
+            self.network_op = td.op(NETWORK_COMPONENT_PATH)
 
-        # Create a default op for project1
-        if self.get_handle_for_native_op(self.network_op) is None:
-            # Network op is not registered. First, clear all ops.
-            self.clear()
+        # Then, register the network op.
+        self.insert_op(
+            AnnotatedOp(self.network_op, {"name": "network"},
+                        reserved=True))
+        
+        # Maybe adopt the operators already present within the network.
+        try:
+            inputs_by_index = {}
+            outputs_by_index = {}
+            for op in self.network_op.children:
+                descriptor = op.fetch("descriptor", {})
+                reserved = 'io_op_config' in descriptor
+                handle = op.fetch("handle", None)
+                print(f"[DEBUG] Adopting op: {op} descriptor: {descriptor} reserved: {reserved} handle: {handle}")
+                self.ops_by_handle[handle] = AnnotatedOp(op, descriptor, reserved=reserved)
 
-            # Then, register the network op.
-            self.insert_op(
-                AnnotatedOp(self.network_op, {"name": "network"},
-                            reserved=True))
+                if 'input_index' in descriptor['io_op_config']:
+                    inputs_by_index[descriptor['io_op_config']['input_index']] = handle
+                if 'output_index' in descriptor['io_op_config']:
+                    outputs_by_index[descriptor['io_op_config']['output_index']] = handle
+
+            self.input_handles = [
+                inputs_by_index[i] for i in range(len(inputs_by_index))
+            ]
+            self.output_handles = [
+                outputs_by_index[i] for i in range(len(outputs_by_index))
+            ]
+
+            self.current_handle = len(self.ops_by_handle)
+        except Exception as e:
+            print(f"[DEBUG] Error adopting operators: {e}")
 
     def load_io_config(self, io_config_path):
         if self.io_config_path != io_config_path:
-            print(f"[DEBUG] Loading IO config from: {io_config_path}")
+            print(f"[DEBUG] Loading IO config from: {io_config_path} network_op: {self.network_op}")
             self.set_io_config(json.load(open(io_config_path)))
             self.io_config_path = io_config_path
 
     def set_io_config(self, io_config):
         self.io_config = io_config
+
+        inputs = io_config["inputs"]
+        outputs = io_config["outputs"]
+
+        if len(inputs) == len(self.input_handles) and len(outputs) == len(self.output_handles):
+            print(f"[DEBUG] Input and output handle counts match, assuming no changes.")
+            return
 
         # Delete old ops
         for handle in self.input_handles:
@@ -109,16 +146,27 @@ class TDProxy:
         for handle in self.output_handles:
             self.delete_op(handle)
 
-        self.input_handles = []
-        self.output_handles = []
+        new_input_handles = []
+        new_output_handles = []
 
-        inputs = io_config["inputs"]
-        for input in inputs:
-            self.input_handles.append(self.load(input, reserved=True))
+        for index, input in enumerate(inputs):
+            io_op_config = {
+                "input_index": index,
+            }
+            input_handle = self.load(input, reserved=True, io_op_config=io_op_config)
+            self.get_op(input_handle).op.name = f"in{index + 1}"
+            new_input_handles.append(input_handle)
 
-        outputs = io_config["outputs"]
-        for output in outputs:
-            self.output_handles.append(self.load(output, reserved=True))
+        for index, output in enumerate(outputs):
+            io_op_config = {
+                "output_index": index,
+            }
+            output_handle = self.load(output, reserved=True, io_op_config=io_op_config)
+            self.get_op(output_handle).op.name = f"out{index + 1}"
+            new_output_handles.append(output_handle)
+
+        self.input_handles = new_input_handles
+        self.output_handles = new_output_handles
 
     def insert_op(self, op):
         self.ops_by_handle[self.current_handle] = op
@@ -157,7 +205,7 @@ class TDProxy:
     @expose
     def create_op(self, name):
         print(f"[DEBUG] Creating op: {name}")
-        native_op = td.op('/project1/network').create(name)
+        native_op = td.op(NETWORK_COMPONENT_PATH).create(name)
         handle = self.insert_op(AnnotatedOp(native_op, {"name": name}))
         native_op.store("handle", handle)
         op.op.store("descriptor", op.descriptor)
@@ -171,10 +219,10 @@ class TDProxy:
                 for handle, op in self.ops_by_handle.items()]
 
     @expose
-    def load(self, name, reserved=False):
+    def load(self, name, reserved=False, io_op_config=None):
         print(f"[DEBUG] Loading component: {name}")
         op = AnnotatedOp.load(
-            name, "/Users/kevin/Projects/graph_explorer/components", reserved)
+            name, "/Users/kevin/Projects/graph_explorer/components", reserved, io_op_config)
         handle = self.insert_op(op)
         op.op.store("handle", handle)
         op.op.store("descriptor", op.descriptor)
@@ -326,7 +374,7 @@ class TDProxy:
             handles_to_remove = []
             for handle, op in self.ops_by_handle.items():
                 if op.reserved:
-                    # Skip the default project1 op, otherwise we crash.
+                    # Skip the network and I/O ops, otherwise we crash.
                     continue
                 try:
                     op.op.destroy()
@@ -498,6 +546,11 @@ def onCook(scriptOp):
         if SHOULD_STOP:
             server_manager.stop_server()
             SHOULD_STOP = False
+            # If SHOULD_STOP is True, it is likely that the scriptDAT was edited.
+            # In this case, we need to recreate the server manager (as the class
+            # definition may have changed).
+            server_manager = PyroServerManager()
+            me.store('server_manager', server_manager)
 
     scriptOp.clear()
     # Poll Pyro events synchronously on each cook cycle.

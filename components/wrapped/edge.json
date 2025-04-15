@@ -1,0 +1,16 @@
+{
+    "td_component": "edgeTOP",
+    "inputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "description": "Performs edge detection on the input texture."
+}

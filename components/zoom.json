@@ -20,6 +20,14 @@
       {
         "name": "zoom_speed",
         "type": "unitary"
+      },
+      {
+        "name": "center_xy",
+        "type": "xy"
+      },
+      {
+        "name": "rotate",
+        "type": "angle"
       }
     ],
     "outputs": [

@@ -1,5 +1,4 @@
 import Pyro5.api
-import IPython
 import argparse
 from graph_utils import bridge, topo_sort_handles, layout_nodes
 import logging
@@ -7,15 +6,17 @@ import threading
 
 td_proxy_container = [None]
 
+rebuild_lock = threading.Lock()
+
 @Pyro5.api.expose    # Expose this class to be accessible over Pyro
 class IOCallback:
+    def __init__(self, td_proxy):
+        self.td_proxy = td_proxy  # Store the original proxy
+        
     @Pyro5.api.expose    # Make sure to expose the method
     def notify(self, args):    # Changed from __call__ to a named method
         print(f"Callback received: {args}")
-        print(f"TD proxy container: {td_proxy_container}")
-        if td_proxy_container[0] is not None:
-            print(f"Rebuilding graph")
-            rebuild_graph(td_proxy_container[0])
+        rebuild_lock.release()
 
 def rebuild_graph(td_proxy):
     td_proxy.clear()
@@ -41,6 +42,7 @@ def rebuild_graph(td_proxy):
 
 
 def main():
+    global rebuild_flag
     # Add at the top of the file, before any other imports
     logging.basicConfig(
         level=logging.DEBUG,
@@ -58,35 +60,34 @@ def main():
 
     args = parser.parse_args()
 
-    try:
-        uri = f"PYRO:td@localhost:{args.port}"
-        td_proxy = Pyro5.api.Proxy(uri)
-        print("Connected to TouchDesigner!")
+    uri = f"PYRO:td@localhost:{args.port}"
+    td_proxy = Pyro5.api.Proxy(uri)
+    print("Connected to TouchDesigner!")
+    
+    # Create a Pyro daemon for the callback object
+    daemon = Pyro5.api.Daemon()
+    callback = IOCallback(td_proxy)  # Pass the original proxy
+    uri = daemon.register(callback)
+    
+    # Register the callback's URI instead of the function
+    td_proxy.register_io_callback(uri)
+    
+    if args.test_network:
+        rebuild_graph(td_proxy)
         
-        # Create a Pyro daemon for the callback object
-        daemon = Pyro5.api.Daemon()
-        callback = IOCallback()
-        uri = daemon.register(callback)
-        
-        # Register the callback's URI instead of the function
-        td_proxy.register_io_callback(uri)
+    # Start the daemon loop in a separate thread
+    thread = threading.Thread(target=daemon.requestLoop, daemon=True)
+    thread.start()
 
-        td_proxy_container[0] = td_proxy
-        
-        if args.test_network:
+    rebuild_lock.acquire()
+
+    while True:
+        rebuild_lock.acquire()
+        try:
             rebuild_graph(td_proxy)
+        except Exception as e:
+            print(f"Error: {e}")
             
-        # Start the daemon loop in a separate thread
-        #thread = threading.Thread(target=daemon.requestLoop, daemon=True)
-        #thread.start()
-
-        daemon.requestLoop()
-            
-    except Exception as e:
-        print(f"Error: {e}")
-
-    IPython.embed()
-
 
 if __name__ == "__main__":
     main()

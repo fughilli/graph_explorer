@@ -1,0 +1,16 @@
+{
+    "tox_file": "unitary_to_angle.tox",
+    "inputs": [
+        {
+            "name": "in",
+            "type": "unitary"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "out",
+            "type": "angle"
+        }
+    ],
+    "description": "Converts a unitary value to an angle."
+}
