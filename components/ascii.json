@@ -1,0 +1,16 @@
+{
+    "tox_file": "ascii.tox",
+    "inputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "description": "Converts the input texture to ASCII art."
+}

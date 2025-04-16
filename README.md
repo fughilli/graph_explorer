@@ -71,7 +71,35 @@ Components are defined using JSON descriptors:
 }
 ```
 
-## Usage Example
+## How To Use
+
+Open `project/graph_explorer.toe` in TouchDesigner:
+
+```sh
+open project/graph_explorer.toe
+```
+
+Start the server. From TextPort:
+
+```python
+op('/project1/script1').par.Startserver.pulse()
+```
+
+The port will be listed in the DAT output, and in the Server URI parameter.
+
+Next, connect the client:
+
+```sh
+python3 client.py --port <port number> --test-network
+```
+
+This will create a network within the `/project1/network` baseCOMP.
+
+Next, you can try playing with it using TouchOSC. Open `touchosc/graph_explorer_pad.tosc` in TouchOSC and configure OSC output to `localhost:8000`. Button1 is mapped to fire the I/O callback to `client.py`, which is configured to regenerate the graph. The 3 faders and XY pad are mapped as inputs to the graph.
+
+## Python API
+
+The TouchDesigner `td` module is exposed as a Pyro5 RPC interface via a proxy, `TdProxy`. You can load the proxy as follows:
 
 ```python
 # Connect to TouchDesigner

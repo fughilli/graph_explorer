@@ -1,0 +1,16 @@
+{
+    "tox_file": "old_crt.tox",
+    "inputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "description": "Applies an old CRT effect to the input texture."
+}

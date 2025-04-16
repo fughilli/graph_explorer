@@ -1,0 +1,20 @@
+{
+    "td_component": "displaceTOP",
+    "inputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        },
+        {
+            "name": "displacement_map",
+            "type": "tex"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "tex",
+            "type": "tex"
+        }
+    ],
+    "description": "Displaces the texture according to the displacement map."
+}
