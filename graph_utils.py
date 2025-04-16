@@ -4,13 +4,14 @@ import random
 import logging
 from typing import Dict, List, Set, Tuple
 from pathlib import Path
+import fnmatch  # Add this to the imports at the top
 
 # Configure logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Change from INFO to DEBUG
 
 
-def load_components(components_dir: str) -> Dict[str, dict]:
+def load_components(components_dir: str, exclude: List[str] = []) -> Dict[str, dict]:
     """Load all component descriptors from the components directory."""
     components = {}
     components_path = Path(components_dir)
@@ -24,10 +25,18 @@ def load_components(components_dir: str) -> Dict[str, dict]:
     for root, dirs, files in os.walk(components_dir):
         for filename in files:
             if filename.endswith('.json') and filename != 'types.json':
+
                 json_path = os.path.join(root, filename)
                 with open(json_path) as f:
                     # Get name without .json, but keep subdirectory structure
                     rel_path = os.path.relpath(json_path, components_dir)
+
+                    # Exclude patterns are given relative to the components directory
+                    logger.debug(f"[DEBUG] Checking {rel_path} against {exclude}")
+                    if any(fnmatch.fnmatch(rel_path, pattern) for pattern in exclude):
+                        logger.debug(f"[DEBUG] Excluding {rel_path}")
+                        continue
+
                     name = rel_path[:-5]  # Remove .json
                     descriptor = json.load(f)
                     components[name] = descriptor
@@ -69,21 +78,18 @@ def bridge(td_proxy,
         input_handles: A list of input handles.
         output_handles: A list of output handles.
         reuse_weight: The weight of the reuse operation.
+        exclude_components: List of component names or glob patterns to exclude (e.g. ["wrapped/*", "audio_*"])
+        include_io_config: Whether to include handles from the IO config
     """
     logger.debug("Starting bridge with inputs=%s, outputs=%s", input_handles, output_handles)
-    
+
     # Get IO configuration
     io_config = td_proxy.get_io_handles()
     logger.debug("IO config: %s", io_config)
 
     # Get all component descriptors
     components = load_components(
-        "/Users/kevin/Projects/graph_explorer/components")
-
-    # Exclude components specified in exclude_components
-    for component in exclude_components:
-        if component in components:
-            del components[component]
+        "/Users/kevin/Projects/graph_explorer/components", exclude=exclude_components)
 
     logger.debug("Available components: %s", components)
 
@@ -368,8 +374,6 @@ def topo_sort_handles(td_proxy, handles):
 
 def layout_nodes(td_proxy, sorted_handles):
     logger.debug("Starting node layout")
-    # Add the output node (handle 1) to our layout
-    sorted_handles.append(1)  # The output node always has handle 1
 
     # Get the geometry for each handle
     geometry = {}

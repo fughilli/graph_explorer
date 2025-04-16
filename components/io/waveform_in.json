@@ -5,9 +5,8 @@
     "outputs": [
       {
         "name": "value",
-        "type": "unitary"
+        "type": "waveform"
       }
     ],
-    "description": "Unitary input."
+    "description": "Waveform input."
   }
-  

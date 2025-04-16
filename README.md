@@ -125,6 +125,20 @@ layout_nodes(td_proxy, created_nodes)
 - Use the `--test-network` flag for testing graph generation
 - Monitor TouchDesigner's textport for debug information
 
+## Development Setup
+
+1. Install development dependencies:
+```bash
+pip install pre-commit
+```
+
+2. Install the git hooks:
+```bash
+pre-commit install
+```
+
+This will automatically check for and fix trailing whitespace and other common issues before each commit.
+
 ## License
 
 ```

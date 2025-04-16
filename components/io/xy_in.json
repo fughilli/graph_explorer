@@ -5,9 +5,8 @@
     "outputs": [
       {
         "name": "value",
-        "type": "waveform"
+        "type": "xy"
       }
     ],
-    "description": "Waveform input."
+    "description": "XY input."
   }
-  

@@ -1,12 +1,12 @@
 {
     "inputs": [
-        "wrapped/waveform_in",
-        "wrapped/unitary_in",
-        "wrapped/unitary_in",
-        "wrapped/unitary_in",
-        "wrapped/xy_in"
+        "io/waveform_in",
+        "io/unitary_in",
+        "io/unitary_in",
+        "io/unitary_in",
+        "io/xy_in"
     ],
     "outputs": [
-        "wrapped/tex_out"
+        "io/tex_out"
     ]
 }

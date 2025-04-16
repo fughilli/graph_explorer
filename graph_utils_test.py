@@ -5,7 +5,7 @@ from graph_utils import bridge, topo_sort_handles, load_components
 from unittest.mock import MagicMock, patch
 
 # Add at the top of the file
-logging.basicConfig(level=logging.DEBUG, 
+logging.basicConfig(level=logging.DEBUG,
                    format='%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class MockTDProxy:
         if key not in self.connections:
             self.connections[key] = []
         self.connections[key].append((target_handle, target_idx))
-        logger.debug("Connected %s[%d] -> %s[%d]", 
-                    source_handle, source_idx, 
+        logger.debug("Connected %s[%d] -> %s[%d]",
+                    source_handle, source_idx,
                     target_handle, target_idx)
 
     def get_op_connectors(self, handle):
@@ -140,7 +140,7 @@ class TestGraphUtils(unittest.TestCase):
         logger.debug("\nStarting bridge test: %s", name)
         logger.debug("Input nodes: %s", input_nodes)
         logger.debug("Output nodes: %s", output_nodes)
-        
+
         # Set up IO handles to match the input/output nodes
         self.td_proxy.io_handles = {
             'inputs': [{'type': type} for _, type in input_nodes],
@@ -158,7 +158,7 @@ class TestGraphUtils(unittest.TestCase):
             self.mock_load_components.return_value[component_name] = descriptor
             self.td_proxy.loaded_components[handle] = component_name
             logger.debug("Set up input node %d with descriptor: %s", handle, descriptor)
-            
+
         for handle, type in output_nodes:
             component_name = f'output_{handle}'
             descriptor = {
@@ -172,8 +172,8 @@ class TestGraphUtils(unittest.TestCase):
         # Extract just the handle numbers for bridge() call
         input_handles = [handle for handle, _ in input_nodes]
         output_handles = [handle for handle, _ in output_nodes]
-        
-        logger.debug("Calling bridge with handles: inputs=%s, outputs=%s", 
+
+        logger.debug("Calling bridge with handles: inputs=%s, outputs=%s",
                     input_handles, output_handles)
         created_nodes = bridge(self.td_proxy,
                            input_handles,
@@ -182,9 +182,9 @@ class TestGraphUtils(unittest.TestCase):
         logger.debug("Bridge returned created nodes: %s", created_nodes)
 
         # Add logging for verification steps
-        logger.debug("Verifying created node count: expected=%d, actual=%d", 
+        logger.debug("Verifying created node count: expected=%d, actual=%d",
                     expected_node_count, len(created_nodes))
-        
+
         # After verification, log the final graph state
         logger.debug("Final graph connections: %s", self.td_proxy.connections)
 

@@ -96,7 +96,7 @@ class TDProxy:
         self.insert_op(
             AnnotatedOp(self.network_op, {"name": "network"},
                         reserved=True))
-        
+
         # Maybe adopt the operators already present within the network.
         try:
             inputs_by_index = {}
@@ -288,10 +288,11 @@ class TDProxy:
             in_connectors = []
             out_connectors = []
 
-            for connector in op.op.inputConnectors:
-                print(f"[DEBUG] Input connector: {connector}")
-                index = connector.index
-                owner_handle = self.get_handle_for_native_op(connector.owner)
+            if handle not in self.input_handles:
+                for connector in op.op.inputConnectors:
+                    print(f"[DEBUG] Input connector: {connector}")
+                    index = connector.index
+                    owner_handle = self.get_handle_for_native_op(connector.owner)
                 target_handles_and_indices = [
                     (self.get_handle_for_native_op(target.owner), target.index)
                     for target in connector.connections
@@ -304,10 +305,11 @@ class TDProxy:
                 print(f"[DEBUG] Converted connector: {in_connector}")
                 in_connectors.append(in_connector)
 
-            for connector in op.op.outputConnectors:
-                print(f"[DEBUG] Output connector: {connector}")
-                index = connector.index
-                owner_handle = self.get_handle_for_native_op(connector.owner)
+            if handle not in self.output_handles:
+                for connector in op.op.outputConnectors:
+                    print(f"[DEBUG] Output connector: {connector}")
+                    index = connector.index
+                    owner_handle = self.get_handle_for_native_op(connector.owner)
                 target_handles_and_indices = [
                     (self.get_handle_for_native_op(target.owner), target.index)
                     for target in connector.connections

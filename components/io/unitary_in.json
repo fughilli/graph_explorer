@@ -5,9 +5,8 @@
     "outputs": [
       {
         "name": "value",
-        "type": "xy"
+        "type": "unitary"
       }
     ],
-    "description": "XY input."
+    "description": "Unitary input."
   }
-  
