@@ -40,14 +40,12 @@ def load_components(components_dir: str, exclude: List[str] = []) -> Dict[str, d
                     name = rel_path[:-5]  # Remove .json
                     descriptor = json.load(f)
                     components[name] = descriptor
-                    logger.debug(
-                        f"[DEBUG] Loaded component {name}: {descriptor}")
+                    logger.debug(f"[DEBUG] Loaded component {name}: {descriptor}")
 
     return components
 
 
-def find_components_producing_type(type_name: str,
-                                   components: Dict[str, dict]) -> List[str]:
+def find_components_producing_type(type_name: str, components: Dict[str, dict]) -> List[str]:
     """Find all components that have an output of the given type."""
     matching_components = []
     for name, descriptor in components.items():
@@ -55,8 +53,7 @@ def find_components_producing_type(type_name: str,
             if output["type"] == type_name:
                 matching_components.append(name)
                 break
-    logger.debug(
-        f"[DEBUG] Components producing {type_name}: {matching_components}")
+    logger.debug(f"[DEBUG] Components producing {type_name}: {matching_components}")
     return matching_components
 
 
@@ -88,8 +85,8 @@ def bridge(td_proxy,
     logger.debug("IO config: %s", io_config)
 
     # Get all component descriptors
-    components = load_components(
-        "/Users/kevin/Projects/graph_explorer/components", exclude=exclude_components)
+    components = load_components("/Users/kevin/Projects/graph_explorer/components",
+                                 exclude=exclude_components)
 
     logger.debug("Available components: %s", components)
 
@@ -120,8 +117,7 @@ def bridge(td_proxy,
             for idx, output in enumerate(descriptor["outputs"]):
                 output_type = output["type"]
                 input_nodes.append((handle, idx, output_type))
-                logger.debug("Input node %d output[%d] provides type %s",
-                             handle, idx, output_type)
+                logger.debug("Input node %d output[%d] provides type %s", handle, idx, output_type)
         else:
             raise ValueError(f"No descriptor found for input handle {handle}")
 
@@ -133,8 +129,7 @@ def bridge(td_proxy,
             for idx, input_desc in enumerate(descriptor["inputs"]):
                 input_type = input_desc["type"]
                 outputs_to_satisfy.append((handle, idx, input_type))
-                logger.debug("Output node %d input[%d] requires type %s",
-                             handle, idx, input_type)
+                logger.debug("Output node %d input[%d] requires type %s", handle, idx, input_type)
         else:
             raise ValueError(f"No descriptor found for output handle {handle}")
 
@@ -162,8 +157,7 @@ def bridge(td_proxy,
         node_order[handle] = current_order
         current_order += 1
 
-    def can_connect_without_cycle(source_handle: int,
-                                  target_handle: int) -> bool:
+    def can_connect_without_cycle(source_handle: int, target_handle: int) -> bool:
         """Check if connecting source to target would create a cycle."""
         nonlocal current_order
 
@@ -191,13 +185,11 @@ def bridge(td_proxy,
 
         # Try to find an existing output of the required type
         logger.debug(f"[DEBUG] Available outputs by type: {available_outputs}")
-        valid_existing_outputs = [
-            (h, idx) for h, idx in available_outputs.get(required_type, [])
-            if can_connect_without_cycle(h, output_handle)
-        ]
+        valid_existing_outputs = [(h, idx)
+                                  for h, idx in available_outputs.get(required_type, [])
+                                  if can_connect_without_cycle(h, output_handle)]
         logger.debug(
-            f"[DEBUG] Valid existing outputs for {required_type}: {valid_existing_outputs}"
-        )
+            f"[DEBUG] Valid existing outputs for {required_type}: {valid_existing_outputs}")
 
         rand_val = random.random()
         use_existing = valid_existing_outputs and rand_val < reuse_weight
@@ -206,33 +198,26 @@ def bridge(td_proxy,
         )
 
         # Create a new component
-        producer_components = find_components_producing_type(
-            required_type, components)
+        producer_components = find_components_producing_type(required_type, components)
         logger.debug(
-            f"[DEBUG] Found producer components for {required_type}: {producer_components}"
-        )
+            f"[DEBUG] Found producer components for {required_type}: {producer_components}")
         if use_existing or not producer_components and len(valid_existing_outputs):
             # Use an existing output
             source_handle, source_index = random.choice(valid_existing_outputs)
             logger.debug(
                 f"[DEBUG] Reusing existing output {source_handle}:{source_index} of type {required_type}"
             )
-            td_proxy.connect(source_handle, source_index, output_handle,
-                             output_index)
+            td_proxy.connect(source_handle, source_index, output_handle, output_index)
             logger.debug(
                 f"[DEBUG] Connected {source_handle}:{source_index} -> {output_handle}:{output_index}"
             )
 
         else:
             if not producer_components:
-                raise ValueError(
-                    f"No components found that can produce type {required_type}"
-                )
+                raise ValueError(f"No components found that can produce type {required_type}")
 
             chosen_component = random.choice(producer_components)
-            logger.debug(
-                f"[DEBUG] Chose component {chosen_component} to produce {required_type}"
-            )
+            logger.debug(f"[DEBUG] Chose component {chosen_component} to produce {required_type}")
 
             new_handle = td_proxy.load(chosen_component)
             created_nodes.append(new_handle)
@@ -240,9 +225,7 @@ def bridge(td_proxy,
 
             # Connect its output to our target
             td_proxy.connect(new_handle, 0, output_handle, output_index)
-            logger.debug(
-                f"[DEBUG] Connected {new_handle}:0 -> {output_handle}:{output_index}"
-            )
+            logger.debug(f"[DEBUG] Connected {new_handle}:0 -> {output_handle}:{output_index}")
 
             # Register all outputs as available
             component_desc = components[chosen_component]
@@ -276,8 +259,7 @@ def bridge(td_proxy,
                 #     )
                 # else:
                 # Add to outputs we need to satisfy
-                outputs_to_satisfy.append(
-                    (new_handle, i, input_desc["type"]))
+                outputs_to_satisfy.append((new_handle, i, input_desc["type"]))
                 logger.debug(
                     f"[DEBUG] Added new output to satisfy: {new_handle}:{i} type {input_desc['type']}"
                 )
@@ -304,8 +286,7 @@ def topo_sort_handles(td_proxy, handles):
 
         # Look at the actual connections in the input connectors
         for in_conn in connectors["in"]:
-            if in_conn[
-                    "targets"]:  # Only look at connectors that have actual connections
+            if in_conn["targets"]:  # Only look at connectors that have actual connections
                 for target_handle, _ in in_conn["targets"]:
                     if target_handle is not None:
                         all_handles.add(target_handle)
@@ -316,14 +297,12 @@ def topo_sort_handles(td_proxy, handles):
 
         in_connections = []
         for in_conn in connectors["in"]:
-            if in_conn[
-                    "targets"]:  # Only count connectors that have actual connections
+            if in_conn["targets"]:  # Only count connectors that have actual connections
                 in_connections.append(in_conn)
 
         out_connections = []
         for out_conn in connectors["out"]:
-            if out_conn[
-                    "targets"]:  # Only count connectors that have actual connections
+            if out_conn["targets"]:  # Only count connectors that have actual connections
                 out_connections.append(out_conn)
 
         connection_info[handle] = {
@@ -336,10 +315,7 @@ def topo_sort_handles(td_proxy, handles):
 
     # Kahn's algorithm for topological sort
     # Count incoming edges for each node
-    in_degree = {
-        handle: len(connection_info[handle]["in_connectors"])
-        for handle in all_handles
-    }
+    in_degree = {handle: len(connection_info[handle]["in_connectors"]) for handle in all_handles}
 
     # Find all nodes with no incoming edges
     queue = [handle for handle in all_handles if in_degree[handle] == 0]
@@ -388,8 +364,7 @@ def layout_nodes(td_proxy, sorted_handles):
         geometry[handle] = (x, y, w, h)
         total_width += w
         max_height = max(max_height, h)
-        logger.debug(
-            f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
+        logger.debug(f"[DEBUG] Node {handle} geometry: x={x}, y={y}, w={w}, h={h}")
 
     # Calculate total width including margins
     total_width += MARGIN * (len(sorted_handles) - 1)
@@ -405,9 +380,7 @@ def layout_nodes(td_proxy, sorted_handles):
         # Center vertically at y=0
         center_y = -h / 2
 
-        logger.debug(
-            f"[DEBUG] Setting position for handle {handle} to x={current_x}, y={center_y}"
-        )
+        logger.debug(f"[DEBUG] Setting position for handle {handle} to x={current_x}, y={center_y}")
         td_proxy.set_op_attribute(handle, "nodeX", current_x)
         td_proxy.set_op_attribute(handle, "nodeY", center_y)
 

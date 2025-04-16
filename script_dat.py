@@ -43,13 +43,11 @@ class AnnotatedOp:
             op = td.op(NETWORK_COMPONENT_PATH).loadTox(tox_path)
         elif "td_component" in descriptor:
             # Create built-in TD component
-            print(
-                f"[DEBUG] Creating TD component: {descriptor['td_component']}")
+            print(f"[DEBUG] Creating TD component: {descriptor['td_component']}")
             op = td.op(NETWORK_COMPONENT_PATH).create(descriptor['td_component'])
         else:
             raise ValueError(
-                f"Component descriptor must specify either 'tox_file' or 'td_component'"
-            )
+                f"Component descriptor must specify either 'tox_file' or 'td_component'")
 
         return cls(op, descriptor, reserved)
 
@@ -93,9 +91,7 @@ class TDProxy:
             self.network_op = td.op(NETWORK_COMPONENT_PATH)
 
         # Then, register the network op.
-        self.insert_op(
-            AnnotatedOp(self.network_op, {"name": "network"},
-                        reserved=True))
+        self.insert_op(AnnotatedOp(self.network_op, {"name": "network"}, reserved=True))
 
         # Maybe adopt the operators already present within the network.
         try:
@@ -105,7 +101,9 @@ class TDProxy:
                 descriptor = op.fetch("descriptor", {})
                 reserved = 'io_op_config' in descriptor
                 handle = op.fetch("handle", None)
-                print(f"[DEBUG] Adopting op: {op} descriptor: {descriptor} reserved: {reserved} handle: {handle}")
+                print(
+                    f"[DEBUG] Adopting op: {op} descriptor: {descriptor} reserved: {reserved} handle: {handle}"
+                )
                 self.ops_by_handle[handle] = AnnotatedOp(op, descriptor, reserved=reserved)
 
                 if 'input_index' in descriptor['io_op_config']:
@@ -113,12 +111,8 @@ class TDProxy:
                 if 'output_index' in descriptor['io_op_config']:
                     outputs_by_index[descriptor['io_op_config']['output_index']] = handle
 
-            self.input_handles = [
-                inputs_by_index[i] for i in range(len(inputs_by_index))
-            ]
-            self.output_handles = [
-                outputs_by_index[i] for i in range(len(outputs_by_index))
-            ]
+            self.input_handles = [inputs_by_index[i] for i in range(len(inputs_by_index))]
+            self.output_handles = [outputs_by_index[i] for i in range(len(outputs_by_index))]
 
             self.current_handle = len(self.ops_by_handle)
         except Exception as e:
@@ -215,14 +209,13 @@ class TDProxy:
     @expose
     def list_ops(self):
         print("[DEBUG] Listing ops")
-        return [(handle, op.descriptor)
-                for handle, op in self.ops_by_handle.items()]
+        return [(handle, op.descriptor) for handle, op in self.ops_by_handle.items()]
 
     @expose
     def load(self, name, reserved=False, io_op_config=None):
         print(f"[DEBUG] Loading component: {name}")
-        op = AnnotatedOp.load(
-            name, "/Users/kevin/Projects/graph_explorer/components", reserved, io_op_config)
+        op = AnnotatedOp.load(name, "/Users/kevin/Projects/graph_explorer/components", reserved,
+                              io_op_config)
         handle = self.insert_op(op)
         op.op.store("handle", handle)
         op.op.store("descriptor", op.descriptor)
@@ -249,9 +242,7 @@ class TDProxy:
 
     @expose
     def get_op_attribute(self, handle, attribute, dir_output=False):
-        print(
-            f"[DEBUG] Getting attribute '{attribute}' from op with handle {handle}"
-        )
+        print(f"[DEBUG] Getting attribute '{attribute}' from op with handle {handle}")
         if op := self.get_op(handle):
             x = op.op
             for attr in attribute.split("."):
@@ -267,9 +258,7 @@ class TDProxy:
 
     @expose
     def set_op_attribute(self, handle, attribute, value):
-        print(
-            f"[DEBUG] Setting attribute '{attribute}' on op with handle {handle} to {value}"
-        )
+        print(f"[DEBUG] Setting attribute '{attribute}' on op with handle {handle} to {value}")
         if op := self.get_op(handle):
             x = op.op
             attrs = attribute.split(".")
@@ -293,10 +282,8 @@ class TDProxy:
                     print(f"[DEBUG] Input connector: {connector}")
                     index = connector.index
                     owner_handle = self.get_handle_for_native_op(connector.owner)
-                target_handles_and_indices = [
-                    (self.get_handle_for_native_op(target.owner), target.index)
-                    for target in connector.connections
-                ]
+                target_handles_and_indices = [(self.get_handle_for_native_op(target.owner),
+                                               target.index) for target in connector.connections]
 
                 in_connector = {
                     "owner": (owner_handle, index),
@@ -310,10 +297,8 @@ class TDProxy:
                     print(f"[DEBUG] Output connector: {connector}")
                     index = connector.index
                     owner_handle = self.get_handle_for_native_op(connector.owner)
-                target_handles_and_indices = [
-                    (self.get_handle_for_native_op(target.owner), target.index)
-                    for target in connector.connections
-                ]
+                target_handles_and_indices = [(self.get_handle_for_native_op(target.owner),
+                                               target.index) for target in connector.connections]
 
                 out_connector = {
                     "owner": (owner_handle, index),
@@ -382,9 +367,7 @@ class TDProxy:
                     op.op.destroy()
                     handles_to_remove.append(handle)
                 except Exception as e:
-                    print(
-                        f"[DEBUG] Error destroying op with handle {handle}: {str(e)}"
-                    )
+                    print(f"[DEBUG] Error destroying op with handle {handle}: {str(e)}")
                     # Continue with other ops even if one fails
                     continue
 
@@ -438,9 +421,7 @@ class PyroServerManager:
             print(f"[DEBUG] Failed to unregister previous object: {ex}")
         try:
             # Register our proxy. Save the URI.
-            uri = self.server.register(self.td_proxy,
-                                       objectId="td",
-                                       force=True)
+            uri = self.server.register(self.td_proxy, objectId="td", force=True)
             self.uri = str(uri)
             print(f"[DEBUG] Pyro server running at {self.uri}")
         except Exception as e:
@@ -462,9 +443,7 @@ class PyroServerManager:
                     ready, _, _ = select.select(sockets, [], [], 0.01)
                     if ready:
                         for sock in ready:
-                            print(
-                                f"[DEBUG] Processing socket with fileno: {sock.fileno()}"
-                            )
+                            print(f"[DEBUG] Processing socket with fileno: {sock.fileno()}")
                         self.server.events(ready)
                     else:
                         break

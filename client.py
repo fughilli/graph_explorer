@@ -8,15 +8,18 @@ td_proxy_container = [None]
 
 rebuild_lock = threading.Lock()
 
-@Pyro5.api.expose    # Expose this class to be accessible over Pyro
+
+@Pyro5.api.expose  # Expose this class to be accessible over Pyro
 class IOCallback:
+
     def __init__(self, td_proxy):
         self.td_proxy = td_proxy  # Store the original proxy
 
-    @Pyro5.api.expose    # Make sure to expose the method
-    def notify(self, args):    # Changed from __call__ to a named method
+    @Pyro5.api.expose  # Make sure to expose the method
+    def notify(self, args):  # Changed from __call__ to a named method
         print(f"Callback received: {args}")
         rebuild_lock.release()
+
 
 def rebuild_graph(td_proxy):
     td_proxy.clear()
@@ -26,7 +29,8 @@ def rebuild_graph(td_proxy):
                            output_handles=[],
                            exclude_components=[
                                "io/*",
-                               ], include_io_config=True)
+                           ],
+                           include_io_config=True)
 
     # Sort and layout the created nodes
     io_handles = td_proxy.get_io_handles()

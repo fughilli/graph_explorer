@@ -129,7 +129,8 @@ layout_nodes(td_proxy, created_nodes)
 
 1. Install development dependencies:
 ```bash
-pip install pre-commit
+pip install pre-commit yapf
+npm install -g prettier  # For JSON formatting
 ```
 
 2. Install the git hooks:
@@ -137,7 +138,13 @@ pip install pre-commit
 pre-commit install
 ```
 
-This will automatically check for and fix trailing whitespace and other common issues before each commit.
+This will automatically:
+- Check for and fix trailing whitespace
+- Ensure files end with a newline
+- Check YAML file syntax
+- Prevent large files from being committed
+- Format Python files using yapf (Google style)
+- Format JSON files using prettier
 
 ## License
 
